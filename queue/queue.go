@@ -31,3 +31,17 @@ func (q *Queue) Pop() (filename string, emptyq bool) {
 
 	return song, false
 }
+
+func (q *Queue) AddToQueue(filename string) {
+	q.fifo = append(q.fifo, filename)
+}
+
+func (q *Queue) PlayNext(filename string) {
+	q.fifo = append([]string{filename}, q.fifo...)
+}
+
+// Used as a gateway to let the autoq know a song was played. For training the
+// qutoqueue
+func (q *Queue) NotifyDone(filename string) {
+	q.autoq.NotifyPlayed(filename)
+}

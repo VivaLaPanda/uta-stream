@@ -10,3 +10,7 @@ func NewQueue() *Queue {
 func (*Queue) Vpop() string {
 	return ""
 }
+
+func (*Queue) NotifyPlayed(filename string) {
+	return
+}
