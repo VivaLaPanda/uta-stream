@@ -2,6 +2,7 @@ package auto
 
 import (
 	"encoding/gob"
+	"fmt"
 	"log"
 	"math/rand"
 	"os"
@@ -21,8 +22,8 @@ var autosaveTimer time.Duration = 10
 // Function which will provide a new autoq struct
 // An autoq must be provided a file that it can read/write it's data to
 // so that the chain is preserved between launches
-func NewQueue(qfile string) *Queue {
-	q := &Queue{newChain(1), make(chan string)}
+func NewQueue(qfile string, allowChainbreak bool) *Queue {
+	q := &Queue{newChain(1, allowChainbreak), make(chan string)}
 
 	// startBuildListener will watch a channel for new songs and add their data into
 	// the chain
@@ -31,19 +32,26 @@ func NewQueue(qfile string) *Queue {
 	// Confirm we can interact with our persitent storage
 	_, err := os.Stat(qfile)
 	if err == nil {
-		q.Load(qfile)
+		err = q.Load(qfile)
 	} else if os.IsNotExist(err) {
 		log.Printf("qfile %s doesn't exist. Creating new qfile", qfile)
-		q.Write(qfile)
-	} else {
-		log.Printf("Failed to stat qfile %s, error: %v", qfile, err)
+		err = q.Write(qfile)
+	}
+
+	if err != nil {
+		errString := fmt.Sprintf("Fatal error when interacting with qfile on launch.\nErr: %v\n", err)
+		panic(errString)
 	}
 
 	// Write the chain to disk occasionally to preserve it between runs
 	go func() {
 		for {
-			q.Write(qfile)
 			time.Sleep(autosaveTimer * time.Minute)
+			err := q.Write(qfile)
+			if err != nil {
+				log.Printf("WARNING! Failed to write qfile. Data will not persist until"+
+					"this is fixed. \n Err: %v\n", err)
+			}
 		}
 	}()
 
@@ -52,28 +60,33 @@ func NewQueue(qfile string) *Queue {
 
 // Method which will write the autoq data to the provided file. Will overwrite
 // a file if one already exists at that location.
-func (q *Queue) Write(filename string) {
-	qfile, err := os.Open(filename)
+func (q *Queue) Write(filename string) error {
+	qfile, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0660)
+	defer qfile.Close()
 	if err != nil {
-		panic("Failed to open the queue")
+		return err
 	}
 	encoder := gob.NewEncoder(qfile)
 	encoder.Encode(q.markovChain.chainData)
+
+	return nil
 }
 
 // Method which will load the provided autoq data file. Will overwrite the internal
 // state of the object. Should pretty much only be used when the object is created
 // but it is left public in case a client needs to load old data or something
-func (q *Queue) Load(filename string) {
+func (q *Queue) Load(filename string) error {
 	file, err := os.Open(filename)
 	defer file.Close()
 	if err == nil {
 		decoder := gob.NewDecoder(file)
-		err = decoder.Decode(q)
+		err = decoder.Decode(q.markovChain.chainData)
 	}
 	if err != nil {
-		panic("Fatal error while loading queue")
+		return err
 	}
+
+	return nil
 }
 
 // Vpop simply returns the next song according to the Markov chain
@@ -105,48 +118,57 @@ func (p prefix) shift(word string) {
 // A prefix is a string of prefixLen songs joined with spaces.
 // A suffix is a single song. A prefix can have multiple suffixes.
 type chain struct {
-	chainData  map[string][]string
-	chainWLock *sync.Mutex
-	prefixLen  int
+	chainData       *map[string][]string
+	prefix          prefix
+	chainWLock      *sync.Mutex
+	prefixLen       int
+	allowChainbreak bool
 }
 
 // newChain returns a new chain with prefixes of prefixLen songs
-func newChain(prefixLen int) *chain {
-	return &chain{make(map[string][]string), &sync.Mutex{}, prefixLen}
+func newChain(prefixLen int, allowChainbreak bool) *chain {
+	chainData := make(map[string][]string)
+	return &chain{&chainData, make(prefix, prefixLen), &sync.Mutex{}, prefixLen, allowChainbreak}
 }
 
 // Build reads song uris from the provided channel
 // parses it into prefixes and suffixes that are stored in chain.
 func (c *chain) startBuildListener(input chan string) {
 	go func() {
-		p := make(prefix, c.prefixLen)
 		for s := range input {
-			key := p.String()
 			c.chainWLock.Lock()
-			c.chainData[key] = append(c.chainData[key], s)
+			key := c.prefix.String()
+			(*c.chainData)[key] = append((*c.chainData)[key], s)
+			c.prefix.shift(s)
 			c.chainWLock.Unlock()
-			p.shift(s)
 		}
 	}()
 }
 
 // Returns the next song to play
 func (c *chain) generate() string {
-	p := make(prefix, c.prefixLen)
-
 	// Choices represents songs it might be good to play next
-	choices := c.chainData[p.String()]
+	choices := (*c.chainData)[c.prefix.String()]
+
+	// Randchoice provides a song randomly from the chain, without regard to the last
+	// song
+	var randChoice string
+	for _, v := range *c.chainData {
+		randChoice = v[rand.Intn(len(v))]
+	}
 
 	// If there are no known songs, just pick something at random
 	if len(choices) == 0 {
-		for _, v := range c.chainData {
-			return v[0]
-		}
+		return randChoice
+	}
+
+	// 1/50 chance that a random song is picked
+	if rand.Intn(50) == 1 {
+		return randChoice
 	}
 
 	// Randomly select one of the choices
 	song := choices[rand.Intn(len(choices))]
-	p.shift(song)
 
 	return song
 }
