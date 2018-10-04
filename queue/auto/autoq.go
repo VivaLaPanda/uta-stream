@@ -2,6 +2,7 @@ package auto
 
 import (
 	"encoding/gob"
+	"log"
 	"math/rand"
 	"os"
 	"strings"
@@ -10,105 +11,142 @@ import (
 )
 
 type Queue struct {
-	markovChain *Chain
+	markovChain *chain
 	playedSongs chan string
 }
 
-func NewQueue() *Queue {
-	q := &Queue{NewChain(1), make(chan string)}
-	q.markovChain.StartBuildListener(q.playedSongs)
+// How many minutes to wait between saves of the autoq state
+var autosaveTimer time.Duration = 10
+
+// Function which will provide a new autoq struct
+// An autoq must be provided a file that it can read/write it's data to
+// so that the chain is preserved between launches
+func NewQueue(qfile string) *Queue {
+	q := &Queue{newChain(1), make(chan string)}
+
+	// startBuildListener will watch a channel for new songs and add their data into
+	// the chain
+	q.markovChain.startBuildListener(q.playedSongs)
+
+	// Confirm we can interact with our persitent storage
+	_, err := os.Stat(qfile)
+	if err == nil {
+		q.Load(qfile)
+	} else if os.IsNotExist(err) {
+		log.Printf("qfile %s doesn't exist. Creating new qfile", qfile)
+		q.Write(qfile)
+	} else {
+		log.Printf("Failed to stat qfile %s, error: %v", qfile, err)
+	}
 
 	// Write the chain to disk occasionally to preserve it between runs
 	go func() {
-		// Testing we can write the q
-		qfile, err := os.Open("autoq.db")
-		if err != nil {
-			panic("Failed to open the queue")
-		}
-		qfile.Close()
-
 		for {
-			time.Sleep(10 * time.Minute)
-			qfile, err := os.Open("autoq.db")
-			if err != nil {
-				panic("Failed to open the queue")
-			}
-			encoder := gob.NewEncoder(qfile)
-			encoder.Encode(q.markovChain.chain)
+			q.Write(qfile)
+			time.Sleep(autosaveTimer * time.Minute)
 		}
 	}()
 
 	return q
 }
 
-func (q *Queue) Vpop() string {
-	return q.markovChain.Generate()
+// Method which will write the autoq data to the provided file. Will overwrite
+// a file if one already exists at that location.
+func (q *Queue) Write(filename string) {
+	qfile, err := os.Open(filename)
+	if err != nil {
+		panic("Failed to open the queue")
+	}
+	encoder := gob.NewEncoder(qfile)
+	encoder.Encode(q.markovChain.chainData)
 }
 
+// Method which will load the provided autoq data file. Will overwrite the internal
+// state of the object. Should pretty much only be used when the object is created
+// but it is left public in case a client needs to load old data or something
+func (q *Queue) Load(filename string) {
+	file, err := os.Open(filename)
+	defer file.Close()
+	if err == nil {
+		decoder := gob.NewDecoder(file)
+		err = decoder.Decode(q)
+	}
+	if err != nil {
+		panic("Fatal error while loading queue")
+	}
+}
+
+// Vpop simply returns the next song according to the Markov chain
+func (q *Queue) Vpop() string {
+	return q.markovChain.generate()
+}
+
+// The interface for external callers to add to the markov chain
+// In our case we use it to notify the chain that a song was played in full
 func (q *Queue) NotifyPlayed(filename string) {
 	q.playedSongs <- filename
 }
 
-// Prefix is a Markov chain prefix of one or more song.
-type Prefix []string
+// prefix is a Markov chain prefix of one or more song.
+type prefix []string
 
-// String returns the Prefix as a string (for use as a map key).
-func (p Prefix) String() string {
+// String returns the prefix as a string (for use as a map key).
+func (p prefix) String() string {
 	return strings.Join(p, " ")
 }
 
-// Shift removes the first song from the Prefix and appends the given song.
-func (p Prefix) Shift(word string) {
+// shift removes the first song from the prefix and appends the given song.
+func (p prefix) shift(word string) {
 	copy(p, p[1:])
 	p[len(p)-1] = word
 }
 
-// Chain contains a map ("chain") of prefixes to a list of suffixes.
+// chain contains a map ("chain") of prefixes to a list of suffixes.
 // A prefix is a string of prefixLen songs joined with spaces.
 // A suffix is a single song. A prefix can have multiple suffixes.
-type Chain struct {
-	chain      map[string][]string
+type chain struct {
+	chainData  map[string][]string
 	chainWLock *sync.Mutex
 	prefixLen  int
 }
 
-// NewChain returns a new Chain with prefixes of prefixLen songs
-func NewChain(prefixLen int) *Chain {
-	return &Chain{make(map[string][]string), &sync.Mutex{}, prefixLen}
+// newChain returns a new chain with prefixes of prefixLen songs
+func newChain(prefixLen int) *chain {
+	return &chain{make(map[string][]string), &sync.Mutex{}, prefixLen}
 }
 
 // Build reads song uris from the provided channel
-// parses it into prefixes and suffixes that are stored in Chain.
-func (c *Chain) StartBuildListener(input chan string) {
+// parses it into prefixes and suffixes that are stored in chain.
+func (c *chain) startBuildListener(input chan string) {
 	go func() {
-		p := make(Prefix, c.prefixLen)
+		p := make(prefix, c.prefixLen)
 		for s := range input {
 			key := p.String()
 			c.chainWLock.Lock()
-			c.chain[key] = append(c.chain[key], s)
+			c.chainData[key] = append(c.chainData[key], s)
 			c.chainWLock.Unlock()
-			p.Shift(s)
+			p.shift(s)
 		}
 	}()
 }
 
 // Returns the next song to play
-func (c *Chain) Generate() string {
-	p := make(Prefix, c.prefixLen)
+func (c *chain) generate() string {
+	p := make(prefix, c.prefixLen)
 
 	// Choices represents songs it might be good to play next
-	choices := c.chain[p.String()]
+	choices := c.chainData[p.String()]
 
 	// If there are no known songs, just pick something at random
 	if len(choices) == 0 {
-		for _, v := range c.chain {
+		for _, v := range c.chainData {
 			return v[0]
 		}
 	}
 
 	// Randomly select one of the choices
 	song := choices[rand.Intn(len(choices))]
-	p.Shift(song)
+	p.shift(song)
 
 	return song
 }

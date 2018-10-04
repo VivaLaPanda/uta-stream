@@ -11,7 +11,7 @@ type Queue struct {
 }
 
 func NewQueue() *Queue {
-	return &Queue{autoq: auto.NewQueue()}
+	return &Queue{autoq: auto.NewQueue("autoq.db")}
 }
 
 // Returns the audio resource next in the queue
