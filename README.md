@@ -11,3 +11,25 @@ Core features:
     - DJ mode: Single user queues tracks (requests?)
     - Community mode: Any user queues tracks
     - Hybrid mode: Auto mode, but users can queue and all manually queued songs will be played before going back to the auto-queue
+
+Progress:
+
+Done:
+* Core streaming library. One mp3 data stream to multiple clients in sync
+* Queuing system, including auto mode
+* MP3 data processing, can read files and get necessary header data
+
+In Progress:
+
+Ready to start:
+* Resource cache
+* Downloaders
+    - youtube
+    - soundcloud
+    - ipfs
+* API
+* DJ Mode
+* Permissions (Key-based)
+
+Stretch goals:
+* Discord bot stuff
