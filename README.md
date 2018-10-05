@@ -33,3 +33,4 @@ Ready to start:
 
 Stretch goals:
 * Discord bot stuff
+* Currently designed with no IPFS garbage collection, should eventually support that
