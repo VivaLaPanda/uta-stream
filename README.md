@@ -27,12 +27,12 @@ Done:
 * Resource cache
 
 In Progress:
-
-Ready to start:
 * Downloaders
     - youtube
     - soundcloud
     - ipfs
+
+Ready to start:
 * API
 * DJ Mode
 * Permissions (Key-based)
@@ -40,3 +40,4 @@ Ready to start:
 Stretch goals:
 * Discord bot stuff
 * Currently designed with no IPFS garbage collection, should eventually support that
+* Fixing up encoder to work off stream not file
