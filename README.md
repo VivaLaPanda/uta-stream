@@ -16,13 +16,13 @@ Core features:
 
 Done:
 * Core streaming library. One mp3 data stream to multiple clients in sync
-* Queuing system, including auto mode
 * MP3 data processing, can read files and get necessary header data
+* Queuing system, including auto mode
+* Resource cache
 
 In Progress:
 
 Ready to start:
-* Resource cache
 * Downloaders
     - youtube
     - soundcloud
