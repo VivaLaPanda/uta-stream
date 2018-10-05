@@ -2,6 +2,7 @@ package encoder
 
 import (
 	"io"
+	"log"
 	"os"
 
 	"github.com/VivaLaPanda/uta-stream/queue"
@@ -9,20 +10,30 @@ import (
 )
 
 type Encoder struct {
-	Output      chan []byte
-	currentSong *chan []byte
-	nextSong    *chan []byte
-	queue       *queue.Queue
+	Output           chan []byte
+	packetsPerSecond int
+	currentSong      *chan []byte
+	nextSong         *chan []byte
+	queue            *queue.Queue
+	currentSongPath  string
+	nextSongPath     string
 }
 
-func NewEncoder(queue *queue.Queue) *Encoder {
+// Packets-per-second sacrifices reliability for synchronization
+// Higher means more synchornized streams. Minimum should be 1, super large
+// values have undefined behaviour
+// 2 is a reasonable default
+func NewEncoder(queue *queue.Queue, packetsPerSecond int) *Encoder {
 	currentSong := make(chan []byte, 128)
 	nextSong := make(chan []byte, 128)
 	encoder := &Encoder{
-		Output:      make(chan []byte, 128),
-		currentSong: &currentSong,
-		nextSong:    &nextSong,
-		queue:       queue}
+		Output:           make(chan []byte, 128),
+		packetsPerSecond: packetsPerSecond,
+		currentSong:      &currentSong,
+		nextSong:         &nextSong,
+		queue:            queue,
+		currentSongPath:  "",
+		nextSongPath:     ""}
 
 	// Spin up the job to cast from the current song to our output
 	// and handle song transitions
@@ -37,7 +48,8 @@ func NewEncoder(queue *queue.Queue) *Encoder {
 				// We couldn't play from current, assume that the song ended
 				encoder.Output <- broadcastPacket
 				encoder.currentSong = encoder.nextSong
-				encoder.nextSong = fetchNextSong()
+				encoder.currentSongPath = encoder.nextSongPath
+				encoder.nextSong = encoder.fetchNextSong()
 			default:
 				// There is nothing to play, do nothing
 			}
@@ -48,8 +60,60 @@ func NewEncoder(queue *queue.Queue) *Encoder {
 }
 
 // Will go to queue and get the next track
-func fetchNextSong() *chan []byte {
-	return nil
+func (e *Encoder) fetchNextSong() *chan []byte {
+	nextSongPath, isEmpty := e.queue.Pop()
+	if isEmpty {
+		return nil
+	}
+
+	e.nextSongPath = nextSongPath
+	nextSongChan, err := EncodeMP3(nextSongPath, e.packetsPerSecond)
+	if err != nil {
+		log.Printf("Failed to encode song (%v). Err: %v\n", nextSongPath, err)
+		return nil
+	}
+
+	return nextSongChan
+}
+
+// EncodeMP3 returns a channel containing the data found at the provided file
+// TODO: Rewrite this to pull from a reader and do bitrate estimations parallel with reading bytes
+func EncodeMP3(filename string, packetsPerSecond int) (*chan []byte, error) {
+	reader, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get bitrate from first frame, and then keep updating as we calculate the avg
+	bitrate, err := estimateBitrate(reader)
+	if err != nil {
+		return nil, err
+	}
+	reader.Close()
+
+	// Pretty much have ot reopen a new reader to start from the beginning
+	// of the file
+	reader, err = os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	// Warning, this will kill anything already in the nextsong spot
+	// Meaning, EncodeMP3 should never be called unless nextSong is empty
+	tmpSong := make(chan []byte, 128)
+
+	go func() {
+		// Read file for audio stream
+		for err == nil {
+			// Here we convert the kbps into bytes/seconds per packet so that the stream
+			// rate is correct
+			dataPacket := make([]byte, bitrate/(8*packetsPerSecond))
+			_, err = reader.Read(dataPacket)
+			tmpSong <- dataPacket
+		}
+	}()
+
+	return &tmpSong, nil
 }
 
 // Returns the average bitrate of the file
@@ -74,48 +138,4 @@ func estimateBitrate(reader io.Reader) (int, error) {
 	}
 
 	return averageBitrate, nil
-}
-
-// Returns a byte channel that will be filled with packets from the file
-// Packets-per-second sacrifices reliability for synchronization
-// Higher means more synchornized streams. Minimum should be 1, super large
-// values have undefined behaviour
-// 2 is a reasonable default
-func (e *Encoder) EncodeMP3(filename string, packetsPerSecond int) error {
-	reader, err := os.Open(filename)
-	if err != nil {
-		return err
-	}
-
-	// Get bitrate from first frame, and then keep updating as we calculate the avg
-	bitrate, err := estimateBitrate(reader)
-	if err != nil {
-		return err
-	}
-	reader.Close()
-
-	// Pretty much have ot reopen a new reader to start from the beginning
-	// of the file
-	reader, err = os.Open(filename)
-	if err != nil {
-		return err
-	}
-
-	// Warning, this will kill anything already in the nextsong spot
-	// Meaning, EncodeMP3 should never be called unless nextSong is empty
-	tmpSong := make(chan []byte, 128)
-	e.nextSong = &tmpSong
-
-	go func() {
-		// Read file for audio stream
-		for err == nil {
-			// Here we convert the kbps into bytes/seconds per packet so that the stream
-			// rate is correct
-			dataPacket := make([]byte, bitrate/(8*packetsPerSecond))
-			_, err = reader.Read(dataPacket)
-			*e.nextSong <- dataPacket
-		}
-	}()
-
-	return nil
 }
