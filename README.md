@@ -12,7 +12,7 @@ Core features:
     - Community mode: Any user queues tracks
     - Hybrid mode: Auto mode, but users can queue and all manually queued songs will be played before going back to the auto-queue
 
-Progress:
+## Progress:
 
 Done:
 * Core streaming library. One mp3 data stream to multiple clients in sync
