@@ -10,9 +10,9 @@ type Queue struct {
 	AutoqEnabled bool
 }
 
-// Make a new q structure
-func NewQueue(autoqFilename string, enableAutoq bool) *Queue {
-	return &Queue{autoq: auto.NewQueue(autoqFilename), AutoqEnabled: enableAutoq}
+// Make a new q structure. allowChainbreak will make the autoq more random
+func NewQueue(autoqFilename string, enableAutoq bool, allowChainbreak bool) *Queue {
+	return &Queue{autoq: auto.NewQueue(autoqFilename, allowChainbreak), AutoqEnabled: enableAutoq}
 }
 
 // Returns the audio resource next in the queue
