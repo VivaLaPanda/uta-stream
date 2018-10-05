@@ -12,6 +12,12 @@ Core features:
     - Community mode: Any user queues tracks
     - Hybrid mode: Auto mode, but users can queue and all manually queued songs will be played before going back to the auto-queue
 
+## Installing
+* Install IPFS (https://ipfs.io/) and start daemon
+* Install ffmpeg in your PATH
+* `go get github.com/VivaLaPanda/uta-stream`
+    - During development you may need to `go get` extra stuff because there isn't a `main.go` yet
+
 ## Progress:
 
 Done:
