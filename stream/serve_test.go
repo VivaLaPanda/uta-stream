@@ -15,5 +15,5 @@ func TestServeAudioOverHttp(t *testing.T) {
 		t.Errorf("Failed to generate data stream: %v", err)
 	}
 
-	ServeAudioOverHttp(*bytesToServe, 2)
+	ServeAudioOverHttp(*bytesToServe, 2, 9091)
 }

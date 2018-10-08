@@ -69,10 +69,10 @@ func generateNewStream(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func ServeAudioOverHttp(inputAudio <-chan []byte, packetsPerSecond int) {
+func ServeAudioOverHttp(inputAudio <-chan []byte, packetsPerSecond int, port int) {
 	/* Net listener */
 	n := "tcp"
-	addr := "127.0.0.1:9099"
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	l, err := net.Listen(n, addr)
 	if err != nil {
 		panic("Failed to start server")
@@ -117,5 +117,8 @@ func ServeAudioOverHttp(inputAudio <-chan []byte, packetsPerSecond int) {
 	server := http.Server{
 		Handler: http.HandlerFunc(generateNewStream),
 	}
-	server.Serve(l)
+	log.Printf("Server is listening at %s", addr)
+	if err := server.Serve(l); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("Could not listen on %s: %v\n", addr, err)
+	}
 }
