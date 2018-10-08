@@ -31,9 +31,9 @@ In Progress:
     - youtube
     - soundcloud
     - ipfs
+* API
 
 Ready to start:
-* API
 * DJ Mode
 * Permissions (Key-based)
 
