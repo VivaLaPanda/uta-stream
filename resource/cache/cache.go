@@ -88,13 +88,19 @@ func (c *Cache) Load(filename string) error {
 	return nil
 }
 
-func (c *Cache) FetchUrl(url string) (ipfsPath string, r io.ReadCloser, err error) {
+func (c *Cache) UrlCacheLookup(url string) (ipfsPath string) {
 	ipfsPath, exists := (*c.urlMap)[url]
 	if !exists {
 		// TODO: Go to downloaders and get the resource, add to ipfs, get the hash
 		ipfsPath = "/ipfs/QmeX7q8umBijLRQJT28XteuBTEtxUYZgSruZF3H3N5EPv7" // test file until this is implemented
 		(*c.urlMap)[url] = ipfsPath
 	}
+
+	return ipfsPath
+}
+
+func (c *Cache) FetchUrl(url string) (ipfsPath string, r io.ReadCloser, err error) {
+	ipfsPath = c.UrlCacheLookup(url)
 	r, err = c.FetchIpfs(ipfsPath)
 	return ipfsPath, r, err
 }
