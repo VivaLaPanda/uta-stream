@@ -25,12 +25,13 @@ Done:
 * MP3 data processing, can read files and get necessary header data
 * Queuing system, including auto mode
 * Resource cache
+* Downloaders
+    - youtube
+    - ipfs
 
 In Progress:
 * Downloaders
-    - youtube
     - soundcloud
-    - ipfs
 * API
 
 Ready to start:
