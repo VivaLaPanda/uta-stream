@@ -32,6 +32,7 @@ func ServeApi(e *encoder.Encoder, c *cache.Cache, q *queue.Queue, port int) {
 	// Router
 	router := http.NewServeMux()
 	router.Handle("/", index())
+	router.Handle("/enqueue", enqueue(q, c))
 
 	nextRequestID := func() string {
 		return fmt.Sprintf("%d", time.Now().UnixNano())
@@ -87,6 +88,38 @@ func index() http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "This is the UtaStream client API. Documentation on routes is at https://github.com/VivaLaPanda/uta-stream")
+	})
+}
+
+func enqueue(q *queue.Queue, c *cache.Cache) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		resourceToQueue := r.URL.Query().Get("song")
+		if resourceToQueue == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintln(w, "/enqueue expects a song resource identifier in the request.\n"+
+				"eg api.example/enqueue?song1=https%3A%2F%2Fyoutu.be%2FnAwTw1aYy6M") // https://youtu.be/nAwTw1aYy6M
+		}
+
+		// TODO: This assumes we're only dealing with urls, doesn't check ipfs
+		ipfsPath := c.UrlCacheLookup(resourceToQueue)
+		q.AddToQueue(ipfsPath)
+	})
+}
+
+func playnext(q *queue.Queue, c *cache.Cache) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		resourceToQueue := r.URL.Query().Get("song")
+		if resourceToQueue == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintln(w, "/playnext expects a song resource identifier in the request.\n"+
+				"eg api.example/enqueue?song1=https%3A%2F%2Fyoutu.be%2FnAwTw1aYy6M") // https://youtu.be/nAwTw1aYy6M
+		}
+
+		// TODO: This assumes we're only dealing with urls, doesn't check ipfs
+		ipfsPath := c.UrlCacheLookup(resourceToQueue)
+		q.PlayNext(ipfsPath)
 	})
 }
 
