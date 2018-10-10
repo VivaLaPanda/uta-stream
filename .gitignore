@@ -8,8 +8,9 @@
 # Test binary, build with `go test -c`
 *.test
 
-# Song generated during cache test
+# Stuff used for testing
 test_song.mp3
+**/TEMP-DL
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
