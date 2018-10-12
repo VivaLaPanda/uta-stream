@@ -75,7 +75,7 @@ func ServeAudioOverHttp(inputAudio <-chan []byte, packetsPerSecond int, port int
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	l, err := net.Listen(n, addr)
 	if err != nil {
-		panic("Failed to start server")
+		panic("Failed to start audio server")
 	}
 
 	// Listen for channels that need to be closed
@@ -117,7 +117,7 @@ func ServeAudioOverHttp(inputAudio <-chan []byte, packetsPerSecond int, port int
 	server := http.Server{
 		Handler: http.HandlerFunc(generateNewStream),
 	}
-	log.Printf("Server is listening at %s", addr)
+	log.Printf("Audio server is listening at %s", addr)
 	if err := server.Serve(l); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Could not listen on %s: %v\n", addr, err)
 	}

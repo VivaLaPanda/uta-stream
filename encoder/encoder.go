@@ -5,8 +5,10 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/VivaLaPanda/uta-stream/queue"
+	"github.com/VivaLaPanda/uta-stream/resource/cache"
 	"github.com/tcolgate/mp3"
 )
 
@@ -16,6 +18,7 @@ type Encoder struct {
 	currentSong      *chan []byte
 	nextSong         *chan []byte
 	queue            *queue.Queue
+	cache            *cache.Cache
 	currentSongPath  string
 	nextSongPath     string
 	playLock         *sync.Mutex
@@ -25,8 +28,8 @@ type Encoder struct {
 // Higher means more synchornized streams. Minimum should be 1, super large
 // values have undefined behaviour
 // 2 is a reasonable default
-func NewEncoder(queue *queue.Queue, packetsPerSecond int) *Encoder {
-	currentSong := make(chan []byte, 1024)
+func NewEncoder(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Encoder {
+	currentSong := make(chan []byte, 128)
 	nextSong := make(chan []byte, 128)
 	encoder := &Encoder{
 		Output:           make(chan []byte, 128),
@@ -34,6 +37,7 @@ func NewEncoder(queue *queue.Queue, packetsPerSecond int) *Encoder {
 		currentSong:      &currentSong,
 		nextSong:         &nextSong,
 		queue:            queue,
+		cache:            cache,
 		currentSongPath:  "",
 		nextSongPath:     "",
 		playLock:         &sync.Mutex{}}
@@ -50,9 +54,17 @@ func NewEncoder(queue *queue.Queue, packetsPerSecond int) *Encoder {
 				// We couldn't play from current, assume that the song ended
 				encoder.currentSong = encoder.nextSong
 				encoder.currentSongPath = encoder.nextSongPath
-				encoder.nextSong = encoder.fetchNextSong()
+				temp, isEmpty := encoder.fetchNextSong()
+				if !isEmpty {
+					encoder.nextSong = temp
+				}
 			default:
-				// There is nothing to play, do nothing
+				// Both current and next are empty,
+				temp, isEmpty := encoder.fetchNextSong()
+				if !isEmpty {
+					encoder.nextSong = temp
+				}
+				time.Sleep(10 * time.Second)
 			}
 
 			// This lock is used to remotely pause here if necessary.
@@ -111,7 +123,7 @@ func EncodeMP3(filename string, packetsPerSecond int) (*chan []byte, error) {
 func (e *Encoder) Skip() {
 	e.currentSong = e.nextSong
 	e.currentSongPath = e.nextSongPath
-	e.nextSong = e.fetchNextSong()
+	e.nextSong, _ = e.fetchNextSong()
 }
 
 // Will toggle playing by allowing writes to output
@@ -131,20 +143,37 @@ func (e *Encoder) Pause() {
 }
 
 // Will go to queue and get the next track
-func (e *Encoder) fetchNextSong() *chan []byte {
+func (e *Encoder) fetchNextSong() (nextSongChan *chan []byte, isEmpty bool) {
 	nextSongPath, isEmpty := e.queue.Pop()
 	if isEmpty {
-		return nil
+		return nil, true
 	}
 
-	nextSongChan, err := EncodeMP3(nextSongPath, e.packetsPerSecond)
+	nextSongReader, err := e.cache.FetchIpfs(nextSongPath)
+	if err != nil {
+		log.Printf("Failed to fetch song (%v). Err: %v\n", nextSongPath, err)
+		return nil, true
+	}
+
+	// TODO: GET RID OF THIS MONSTROSITY. IT'S SO FUCKING STUPID
+	// Encoder needs to work off af a reader, not a file
+	tempFilePath := nextSongPath[6:]
+	tempFile, err := os.Create(tempFilePath)
+	if err != nil {
+		log.Printf("Failed to write temp file. Err: %v\n", err)
+		return nil, true
+	}
+	io.Copy(tempFile, nextSongReader)
+	tempFile.Close()
+
+	nextSongChan, err = EncodeMP3(tempFilePath, e.packetsPerSecond)
 	if err != nil {
 		log.Printf("Failed to encode song (%v). Err: %v\n", nextSongPath, err)
-		return nil
+		return nil, true
 	}
 	e.nextSongPath = nextSongPath
 
-	return nextSongChan
+	return nextSongChan, false
 }
 
 // Returns the average bitrate of the file

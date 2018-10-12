@@ -14,9 +14,10 @@ import (
 )
 
 type Cache struct {
-	urlMap     *map[string]string
-	urlMapLock *sync.RWMutex
-	ipfs       *shell.Shell
+	urlMap        *map[string]string
+	urlMapLock    *sync.RWMutex
+	ipfs          *shell.Shell
+	cacheFilename string
 }
 
 // How many minutes to wait between saves of the cache state
@@ -29,7 +30,7 @@ var ipfsUrl = "localhost:5001"
 // so that the cache is preserved between launches
 func NewCache(cacheFile string) *Cache {
 	urlMap := make(map[string]string)
-	c := &Cache{&urlMap, &sync.RWMutex{}, shell.NewShell(ipfsUrl)}
+	c := &Cache{&urlMap, &sync.RWMutex{}, shell.NewShell(ipfsUrl), cacheFile}
 
 	// Confirm we can interact with our persitent storage
 	_, err := os.Stat(cacheFile)
@@ -107,6 +108,7 @@ func (c *Cache) UrlCacheLookup(url string) (ipfsPath string, err error) {
 		c.urlMapLock.Lock()
 		(*c.urlMap)[url] = ipfsPath
 		c.urlMapLock.Unlock()
+		c.Write(c.cacheFilename)
 	}
 
 	return ipfsPath, nil
