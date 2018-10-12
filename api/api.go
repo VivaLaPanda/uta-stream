@@ -29,10 +29,14 @@ func ServeApi(e *encoder.Encoder, c *cache.Cache, q *queue.Queue, port int) {
 	logger := log.New(os.Stdout, "http: ", log.LstdFlags)
 	logger.Println("Server is starting...")
 
-	// Router
+	// Router setup
 	router := http.NewServeMux()
 	router.Handle("/", index())
 	router.Handle("/enqueue", enqueue(q, c))
+	router.Handle("/playnext", playnext(q, c))
+	router.Handle("/skip", skip(e))
+	router.Handle("/play", play(e))
+	router.Handle("/pause", pause(e))
 
 	nextRequestID := func() string {
 		return fmt.Sprintf("%d", time.Now().UnixNano())
@@ -102,7 +106,12 @@ func enqueue(q *queue.Queue, c *cache.Cache) http.Handler {
 		}
 
 		// TODO: This assumes we're only dealing with urls, doesn't check ipfs
-		ipfsPath := c.UrlCacheLookup(resourceToQueue)
+		ipfsPath, err := c.UrlCacheLookup(resourceToQueue)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "enqueue encountered an unexpected error: %v", err)
+			return
+		}
 		q.AddToQueue(ipfsPath)
 	})
 }
@@ -118,8 +127,49 @@ func playnext(q *queue.Queue, c *cache.Cache) http.Handler {
 		}
 
 		// TODO: This assumes we're only dealing with urls, doesn't check ipfs
-		ipfsPath := c.UrlCacheLookup(resourceToQueue)
+		ipfsPath, err := c.UrlCacheLookup(resourceToQueue)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "playnext encountered an unexpected error: %v", err)
+			return
+		}
 		q.PlayNext(ipfsPath)
+	})
+}
+
+func skip(e *encoder.Encoder) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+
+		// Encoder is in charge of skipping, not the queue
+		// Kinda weird, but it was the best way to reduce component interdependency
+		e.Skip()
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, "song skipped successfully")
+	})
+}
+
+func play(e *encoder.Encoder) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+
+		// Encoder is in charge of skipping, not the queue
+		// Kinda weird, but it was the best way to reduce component interdependency
+		e.Play()
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, "song skipped successfully")
+	})
+}
+
+func pause(e *encoder.Encoder) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+
+		// Encoder is in charge of skipping, not the queue
+		// Kinda weird, but it was the best way to reduce component interdependency
+		e.Pause()
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, "song skipped successfully")
 	})
 }
 
