@@ -4,6 +4,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"sync"
 
 	"github.com/VivaLaPanda/uta-stream/queue"
 	"github.com/tcolgate/mp3"
@@ -17,6 +18,7 @@ type Encoder struct {
 	queue            *queue.Queue
 	currentSongPath  string
 	nextSongPath     string
+	playLock         *sync.Mutex
 }
 
 // Packets-per-second sacrifices reliability for synchronization
@@ -24,7 +26,7 @@ type Encoder struct {
 // values have undefined behaviour
 // 2 is a reasonable default
 func NewEncoder(queue *queue.Queue, packetsPerSecond int) *Encoder {
-	currentSong := make(chan []byte, 128)
+	currentSong := make(chan []byte, 1024)
 	nextSong := make(chan []byte, 128)
 	encoder := &Encoder{
 		Output:           make(chan []byte, 128),
@@ -33,7 +35,8 @@ func NewEncoder(queue *queue.Queue, packetsPerSecond int) *Encoder {
 		nextSong:         &nextSong,
 		queue:            queue,
 		currentSongPath:  "",
-		nextSongPath:     ""}
+		nextSongPath:     "",
+		playLock:         &sync.Mutex{}}
 
 	// Spin up the job to cast from the current song to our output
 	// and handle song transitions
@@ -43,37 +46,25 @@ func NewEncoder(queue *queue.Queue, packetsPerSecond int) *Encoder {
 			select {
 			case broadcastPacket = <-*encoder.currentSong:
 				// We can succesfully read from the current song, all is good
-				encoder.Output <- broadcastPacket
 			case broadcastPacket = <-*encoder.nextSong:
 				// We couldn't play from current, assume that the song ended
-				encoder.Output <- broadcastPacket
 				encoder.currentSong = encoder.nextSong
 				encoder.currentSongPath = encoder.nextSongPath
 				encoder.nextSong = encoder.fetchNextSong()
 			default:
 				// There is nothing to play, do nothing
 			}
+
+			// This lock is used to remotely pause here if necessary.
+			// If the lock is unlocked, all that will happen is the program moving on,
+			// otherwise we will wait until the lock is released elsewhere
+			encoder.playLock.Lock()
+			encoder.playLock.Unlock()
+			encoder.Output <- broadcastPacket
 		}
 	}()
 
 	return encoder
-}
-
-// Will go to queue and get the next track
-func (e *Encoder) fetchNextSong() *chan []byte {
-	nextSongPath, isEmpty := e.queue.Pop()
-	if isEmpty {
-		return nil
-	}
-
-	e.nextSongPath = nextSongPath
-	nextSongChan, err := EncodeMP3(nextSongPath, e.packetsPerSecond)
-	if err != nil {
-		log.Printf("Failed to encode song (%v). Err: %v\n", nextSongPath, err)
-		return nil
-	}
-
-	return nextSongChan
 }
 
 // EncodeMP3 returns a channel containing the data found at the provided file
@@ -114,6 +105,46 @@ func EncodeMP3(filename string, packetsPerSecond int) (*chan []byte, error) {
 	}()
 
 	return &tmpSong, nil
+}
+
+// Will swap the next song in place of the cuurent one.
+func (e *Encoder) Skip() {
+	e.currentSong = e.nextSong
+	e.currentSongPath = e.nextSongPath
+	e.nextSong = e.fetchNextSong()
+}
+
+// Will toggle playing by allowing writes to output
+func (e *Encoder) Play() {
+	e.playLock.Unlock()
+}
+
+// Will toggle playing by preventing writes to output
+// TODO: FiX THIS. BORKED AS HELL
+// If people keep calling pause then it will keep spawning deadlocked routines
+// until someone hits play, at which point all extra paused routines will die
+// Need someway to check mutex or some different pause approach entirely
+func (e *Encoder) Pause() {
+	go func() {
+		e.playLock.Lock()
+	}()
+}
+
+// Will go to queue and get the next track
+func (e *Encoder) fetchNextSong() *chan []byte {
+	nextSongPath, isEmpty := e.queue.Pop()
+	if isEmpty {
+		return nil
+	}
+
+	nextSongChan, err := EncodeMP3(nextSongPath, e.packetsPerSecond)
+	if err != nil {
+		log.Printf("Failed to encode song (%v). Err: %v\n", nextSongPath, err)
+		return nil
+	}
+	e.nextSongPath = nextSongPath
+
+	return nextSongChan
 }
 
 // Returns the average bitrate of the file
