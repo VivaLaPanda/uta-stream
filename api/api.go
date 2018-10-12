@@ -113,6 +113,9 @@ func enqueue(q *queue.Queue, c *cache.Cache) http.Handler {
 			return
 		}
 		q.AddToQueue(ipfsPath)
+
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "enqueue successfully enqueued audio at: %v", ipfsPath)
 	})
 }
 
@@ -134,6 +137,9 @@ func playnext(q *queue.Queue, c *cache.Cache) http.Handler {
 			return
 		}
 		q.PlayNext(ipfsPath)
+
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "enqueue successfully enqueued audio at: %v", ipfsPath)
 	})
 }
 

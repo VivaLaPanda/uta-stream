@@ -18,6 +18,15 @@ Core features:
 * `go get github.com/VivaLaPanda/uta-stream`
     - During development you may need to `go get` extra stuff because there isn't a `main.go` yet
 
+## Contributing
+The progress is now in a state where contributions would be welcome. Pull requests
+are welcome and I'm excited to work with the community on this project.
+The code is scattered with TODO tags, those could use work and I'll
+convert them to issues soon.
+
+Contribution guidelines are there, but to be honest
+this is a small project, just use common sense.
+
 ## Progress:
 
 Done:
@@ -28,17 +37,17 @@ Done:
 * Downloaders
     - youtube
     - ipfs
+* API
 
 In Progress:
 * Downloaders
     - soundcloud
-* API
 
 Ready to start:
-* DJ Mode
+* DJ Mode (only one user can queue)
 * Permissions (Key-based)
+* Fixing up encoder to work off stream not file
 
 Stretch goals:
 * Discord bot stuff
 * Currently designed with no IPFS garbage collection, should eventually support that
-* Fixing up encoder to work off stream not file
