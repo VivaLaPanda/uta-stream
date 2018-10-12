@@ -68,24 +68,40 @@ func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, removeMp4 bool) (ipfsPa
 	log.Printf("Downloading mp4 from %v\n", urlToDL.EscapedPath())
 	fileLocation := filepath.Join(tempDLFolder, vidInfo.Title)
 	_ = os.MkdirAll(filepath.Dir(fileLocation), os.ModePerm)
-	file, err := os.Create(fileLocation + ".mp4")
+	mp4File, err := os.Create(fileLocation + ".mp4")
 	if err != nil {
 		return "", fmt.Errorf("failed to create mp4 file. Err: %v", err)
 	}
-	vidInfo.Download(bestFormat, file)
-	if err = file.Close(); err != nil {
+	vidInfo.Download(bestFormat, mp4File)
+	if err = mp4File.Close(); err != nil {
 		return "", fmt.Errorf("failed to write mp4. Err: %v", err)
 	}
 	log.Printf("Downloading of %v complete\n", urlToDL.EscapedPath())
 
 	// Extract the audio part of the mp4
-	mp3, err := splitAudio(fileLocation, removeMp4)
+	mp3Filename, err := splitAudio(fileLocation, removeMp4)
 	if err != nil {
 		return "", err
 	}
 
-	// Add to IPFS
-	mp3File, err := os.Open(mp3)
+	// Add to ipfs
+	ipfsPath, err = addToIpfs(mp3Filename, ipfs)
+	if err != nil {
+		return "", err
+	}
+
+	// Remove the mp3 now that we've added
+	if err = os.Remove(mp3Filename); err != nil {
+		log.Printf("Failed to remove mp3. Err: %v\n", err)
+	}
+
+	return ipfsPath, nil
+}
+
+// Add the file at the provided location to ipfs and return its IPFS
+// path
+func addToIpfs(fileLocation string, ipfs *shell.Shell) (ipfsPath string, err error) {
+	mp3File, err := os.Open(fileLocation)
 	if err != nil {
 		return "", fmt.Errorf("Failed to open downloaded mp3. Err: %v\n", err)
 	}
@@ -97,12 +113,10 @@ func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, removeMp4 bool) (ipfsPa
 		return "", fmt.Errorf("failed to close mp3 after ipfs write. Err: %v", err)
 	}
 
-	// Remove the mp3 now that we've added
-	if err = os.Remove(mp3); err != nil {
-		log.Printf("Failed to remove mp3. Err: %v\n", err)
-	}
+	// Formatting as proper ipfs path, not just hash
+	ipfsPath = "/ipfs/" + ipfsPath
 
-	return ipfsPath, nil
+	return ipfsPath, err
 }
 
 // Given an mp4 extract the audio into an mp3
@@ -111,14 +125,14 @@ func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, removeMp4 bool) (ipfsPa
 // Requires ffmpeg to be in PATH
 func splitAudio(fileLocation string, removeMp4 bool) (string, error) {
 	ffmpeg, err := exec.LookPath("ffmpeg")
-	var mp3 string
+	var mp3Filename string
 	if err != nil {
 		return "", fmt.Errorf("ffmpeg was not found in PATH. Please install ffmpeg")
 	} else {
 		log.Printf("Attempting to isolate audio as mp3 from %v\n", fileLocation+".mp4")
-		fname := fileLocation + ".mp4"
-		mp3 = fname + ".mp3"
-		cmd := exec.Command(ffmpeg, "-y", "-loglevel", "quiet", "-i", fname, "-vn", mp3)
+		mp4Filename := fileLocation + ".mp4"
+		mp3Filename = mp4Filename + ".mp3"
+		cmd := exec.Command(ffmpeg, "-y", "-loglevel", "quiet", "-i", mp4Filename, "-vn", mp3Filename)
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -126,15 +140,14 @@ func splitAudio(fileLocation string, removeMp4 bool) (string, error) {
 			fmt.Println("Failed to extract audio:", err)
 			return "", err
 		} else {
-			fmt.Println()
-			fmt.Println("Extracted audio:", mp3)
+			fmt.Println("Extracted audio:", mp3Filename)
 			if removeMp4 {
-				if err = os.Remove(fileLocation); err != nil {
+				if err = os.Remove(mp4Filename); err != nil {
 					log.Printf("Failed to remove mp4. Err: %v\n", err)
 				}
 			}
 		}
 	}
 
-	return mp3, nil
+	return mp3Filename, nil
 }

@@ -17,7 +17,7 @@ func TestSplitAudio(t *testing.T) {
 func TestDownloadYoutube(t *testing.T) {
 	rawUrl := "https://youtu.be/nAwTw1aYy6M"
 	ipfsUrl := "localhost:5001"
-	expectedIpfsHash := "Qmcyp23gdiP6oGCp9jJqydkYboCQoCFj5yuiM3nnqzDbqn"
+	expectedIpfsHash := "/ipfs/Qmcyp23gdiP6oGCp9jJqydkYboCQoCFj5yuiM3nnqzDbqn"
 
 	// Setup shell and testing url
 	sh := shell.NewShell(ipfsUrl)
