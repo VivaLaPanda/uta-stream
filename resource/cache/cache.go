@@ -6,14 +6,17 @@ import (
 	"io"
 	"log"
 	"os"
+	"sync"
 	"time"
 
+	"github.com/VivaLaPanda/uta-stream/resource/download"
 	shell "github.com/ipfs/go-ipfs-api"
 )
 
 type Cache struct {
-	urlMap *map[string]string
-	ipfs   *shell.Shell
+	urlMap     *map[string]string
+	urlMapLock *sync.RWMutex
+	ipfs       *shell.Shell
 }
 
 // How many minutes to wait between saves of the cache state
@@ -26,7 +29,7 @@ var ipfsUrl = "localhost:5001"
 // so that the cache is preserved between launches
 func NewCache(cacheFile string) *Cache {
 	urlMap := make(map[string]string)
-	c := &Cache{&urlMap, shell.NewShell(ipfsUrl)}
+	c := &Cache{&urlMap, &sync.RWMutex{}, shell.NewShell(ipfsUrl)}
 
 	// Confirm we can interact with our persitent storage
 	_, err := os.Stat(cacheFile)
@@ -66,7 +69,9 @@ func (c *Cache) Write(filename string) error {
 		return err
 	}
 	encoder := gob.NewEncoder(cacheFile)
+	c.urlMapLock.RLock()
 	encoder.Encode(c.urlMap)
+	c.urlMapLock.RUnlock()
 
 	return nil
 }
@@ -79,7 +84,9 @@ func (c *Cache) Load(filename string) error {
 	defer file.Close()
 	if err == nil {
 		decoder := gob.NewDecoder(file)
+		c.urlMapLock.Lock()
 		err = decoder.Decode(c.urlMap)
+		c.urlMapLock.Unlock()
 	}
 	if err != nil {
 		return err
@@ -88,19 +95,28 @@ func (c *Cache) Load(filename string) error {
 	return nil
 }
 
-func (c *Cache) UrlCacheLookup(url string) (ipfsPath string) {
+func (c *Cache) UrlCacheLookup(url string) (ipfsPath string, err error) {
+	c.urlMapLock.RLock()
 	ipfsPath, exists := (*c.urlMap)[url]
+	c.urlMapLock.RUnlock()
 	if !exists {
-		// TODO: Go to downloaders and get the resource, add to ipfs, get the hash
-		ipfsPath = "/ipfs/QmeX7q8umBijLRQJT28XteuBTEtxUYZgSruZF3H3N5EPv7" // test file until this is implemented
+		ipfsPath, err = download.Download(url, c.ipfs, true)
+		if err != nil {
+			return "", fmt.Errorf(("failed to DL requested resource: %v\nerr:%v"), url, err)
+		}
+		c.urlMapLock.Lock()
 		(*c.urlMap)[url] = ipfsPath
+		c.urlMapLock.Unlock()
 	}
 
-	return ipfsPath
+	return ipfsPath, nil
 }
 
 func (c *Cache) FetchUrl(url string) (ipfsPath string, r io.ReadCloser, err error) {
-	ipfsPath = c.UrlCacheLookup(url)
+	ipfsPath, err = c.UrlCacheLookup(url)
+	if err != nil {
+		return ipfsPath, nil, err
+	}
 	r, err = c.FetchIpfs(ipfsPath)
 	return ipfsPath, r, err
 }

@@ -65,11 +65,11 @@ func TestFetchUrl(t *testing.T) {
 	}
 
 	// Get the reader which should contain the song data
-	ipfsPath, songReader, err := c.FetchUrl("")
+	ipfsPath, songReader, err := c.FetchUrl("https://youtu.be/nAwTw1aYy6M")
 	if err != nil {
 		t.Errorf("Failed to get song from ipfs. Err: %v\n", err)
 	}
-	expectedPath := "/ipfs/QmeX7q8umBijLRQJT28XteuBTEtxUYZgSruZF3H3N5EPv7"
+	expectedPath := "/ipfs/Qmcyp23gdiP6oGCp9jJqydkYboCQoCFj5yuiM3nnqzDbqn"
 	if ipfsPath != expectedPath {
 		t.Errorf("IPFS path doesn't match testing default. Expected: %v\nActual: %v\n", expectedPath, ipfsPath)
 	}
