@@ -16,7 +16,6 @@ Core features:
 * Install IPFS (https://ipfs.io/) and start daemon
 * Install ffmpeg in your PATH
 * `go get github.com/VivaLaPanda/uta-stream`
-    - During development you may need to `go get` extra stuff because there isn't a `main.go` yet
 
 ## Contributing
 The progress is now in a state where contributions would be welcome. Pull requests
