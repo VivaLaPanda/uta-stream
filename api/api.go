@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/VivaLaPanda/uta-stream/encoder"
+	"github.com/VivaLaPanda/uta-stream/mixer"
 	"github.com/VivaLaPanda/uta-stream/queue"
 	"github.com/VivaLaPanda/uta-stream/resource/cache"
 )
@@ -25,7 +25,7 @@ var (
 	healthy int32
 )
 
-func ServeApi(e *encoder.Encoder, c *cache.Cache, q *queue.Queue, port int) {
+func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, port int) {
 	logger := log.New(os.Stdout, "http: ", log.LstdFlags)
 	logger.Println("Server is starting...")
 
@@ -34,9 +34,9 @@ func ServeApi(e *encoder.Encoder, c *cache.Cache, q *queue.Queue, port int) {
 	router.Handle("/", index())
 	router.Handle("/enqueue", enqueue(q, c))
 	router.Handle("/playnext", playnext(q, c))
-	router.Handle("/skip", skip(e))
-	router.Handle("/play", play(e))
-	router.Handle("/pause", pause(e))
+	router.Handle("/skip", skip(m))
+	router.Handle("/play", play(m))
+	router.Handle("/pause", pause(m))
 
 	nextRequestID := func() string {
 		return fmt.Sprintf("%d", time.Now().UnixNano())
@@ -143,7 +143,7 @@ func playnext(q *queue.Queue, c *cache.Cache) http.Handler {
 	})
 }
 
-func skip(e *encoder.Encoder) http.Handler {
+func skip(e *mixer.Mixer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
@@ -155,7 +155,7 @@ func skip(e *encoder.Encoder) http.Handler {
 	})
 }
 
-func play(e *encoder.Encoder) http.Handler {
+func play(e *mixer.Mixer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		e.Play()
@@ -164,7 +164,7 @@ func play(e *encoder.Encoder) http.Handler {
 	})
 }
 
-func pause(e *encoder.Encoder) http.Handler {
+func pause(e *mixer.Mixer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 

@@ -4,7 +4,7 @@ import (
 	"flag"
 
 	"github.com/VivaLaPanda/uta-stream/api"
-	"github.com/VivaLaPanda/uta-stream/encoder"
+	"github.com/VivaLaPanda/uta-stream/mixer"
 	"github.com/VivaLaPanda/uta-stream/queue"
 	"github.com/VivaLaPanda/uta-stream/resource/cache"
 	"github.com/VivaLaPanda/uta-stream/stream"
@@ -24,7 +24,7 @@ func main() {
 
 	q := queue.NewQueue(*autoqFilename, *enableAutoq, *allowChainbreak)
 	c := cache.NewCache(*cacheFilename)
-	e := encoder.NewEncoder(q, c, *packetsPerSecond)
+	e := mixer.NewMixer(q, c, *packetsPerSecond)
 
 	go func() {
 		stream.ServeAudioOverHttp(e.Output, *packetsPerSecond, *audioPort)
