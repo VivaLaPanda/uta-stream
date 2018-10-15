@@ -99,7 +99,7 @@ func (m *Mixer) Play() {
 }
 
 // Will toggle playing by preventing writes to output
-// TODO: FiX THIS. BORKED AS HELL
+// TODO: FiX THIS. BORKED AS HELL https://github.com/VivaLaPanda/uta-stream/issues/3
 // If people keep calling pause then it will keep spawning deadlocked routines
 // until someone hits play, at which point all extra paused routines will die
 // Need someway to check mutex or some different pause approach entirely

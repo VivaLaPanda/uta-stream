@@ -81,7 +81,7 @@ func ServeAudioOverHttp(inputAudio <-chan []byte, packetsPerSecond int, port int
 	// Listen for channels that need to be closed
 	// Potential race condition if the consumer is deleted after the broadcaster
 	// below already enters it in the loop
-	// TODO: Fix that race condition
+	// TODO: Fix that race condition https://github.com/VivaLaPanda/uta-stream/issues/2
 	go func() {
 		for idToKill := range killConsumer {
 			chanCopy := consumers[idToKill]
