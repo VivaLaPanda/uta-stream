@@ -105,20 +105,27 @@ func enqueue(q *queue.Queue, c *cache.Cache) http.Handler {
 				"eg api.example/enqueue?song1=https%3A%2F%2Fyoutu.be%2FnAwTw1aYy6M") // https://youtu.be/nAwTw1aYy6M
 		}
 
-		// TODO: This assumes we're only dealing with urls, doesn't check ipfs
-		ipfsPath, err := c.UrlCacheLookup(resourceToQueue)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "enqueue encountered an unexpected error: %v", err)
-			return
+		// If we're looking at an ipfs path just leave as is
+		// Otherwise go and fetch it
+		if resourceToQueue[:6] != "/ipfs/" {
+			var err error
+			resourceToQueue, err = c.UrlCacheLookup(resourceToQueue)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(w, "enqueue encountered an unexpected error: %v", err)
+				return
+			}
 		}
-		q.AddToQueue(ipfsPath)
+
+		q.AddToQueue(resourceToQueue)
 
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "enqueue successfully enqueued audio at: %v", ipfsPath)
+		fmt.Fprintf(w, "enqueue successfully enqueued audio at: %v", resourceToQueue)
 	})
 }
 
+// TODO: This should be considered non-functional until we work out
+// how to do this properly with the mixer
 func playnext(q *queue.Queue, c *cache.Cache) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -139,7 +146,7 @@ func playnext(q *queue.Queue, c *cache.Cache) http.Handler {
 		q.PlayNext(ipfsPath)
 
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "enqueue successfully enqueued audio at: %v", ipfsPath)
+		fmt.Fprintf(w, "playnext successfully enqueued audio at: %v", ipfsPath)
 	})
 }
 
