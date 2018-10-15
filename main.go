@@ -13,17 +13,19 @@ import (
 // Various runtime flags
 var autoqFilename = flag.String("autoqFilename", "autoq.db", "Where to store autoq database")
 var cacheFilename = flag.String("cacheFilename", "cache.db", "Where to store cache database")
+var ipfsUrl = flag.String("ipfsUrl", "localhost:5001", "The url of the local IPFS instance")
 var enableAutoq = flag.Bool("enableAutoq", true, "Whether to use autoq feature")
 var allowChainbreak = flag.Bool("allowChainbreak", true, "Allows more random autoq")
 var packetsPerSecond = flag.Int("packetsPerSecond", 2, "Affects stream smoothness/synchro")
+var autoQPrefixLen = flag.Int("autoQPrefixLen", 1, "Smaller = more random") // Large values will be random if the history is short
 var apiPort = flag.Int("apiPort", 8085, "Which port to serve the API on")
 var audioPort = flag.Int("audioPort", 9090, "Which port to serve the audio stream on")
 
 func main() {
 	flag.Parse()
 
-	q := queue.NewQueue(*autoqFilename, *enableAutoq, *allowChainbreak)
-	c := cache.NewCache(*cacheFilename)
+	q := queue.NewQueue(*autoqFilename, *enableAutoq, *allowChainbreak, *autoQPrefixLen)
+	c := cache.NewCache(*cacheFilename, *ipfsUrl)
 	e := mixer.NewMixer(q, c, *packetsPerSecond)
 
 	go func() {

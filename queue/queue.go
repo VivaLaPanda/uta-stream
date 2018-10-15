@@ -11,9 +11,10 @@ type Queue struct {
 }
 
 // Make a new q structure. allowChainbreak will make the autoq more random
-func NewQueue(autoqFilename string, enableAutoq bool, allowChainbreak bool) *Queue {
+// TODO: Split this and pass in an autoq instead of making one during construction
+func NewQueue(autoqFilename string, enableAutoq bool, allowChainbreak bool, prefixLength int) *Queue {
 	return &Queue{
-		autoq:        auto.NewQueue(autoqFilename, allowChainbreak),
+		autoq:        auto.NewQueue(autoqFilename, allowChainbreak, prefixLength),
 		AutoqEnabled: enableAutoq}
 }
 

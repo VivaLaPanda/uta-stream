@@ -21,14 +21,14 @@ type Cache struct {
 }
 
 // How many minutes to wait between saves of the cache state
-// TODO: make ipfs url a parameter
-var autosaveTimer time.Duration = 10
-var ipfsUrl = "localhost:5001"
+// This can be long because normal changes to the cache *should* save as well
+// Autosave just helps in case of write failures
+var autosaveTimer time.Duration = 30
 
 // Function which will provide a new cache struct
 // An cache must be provided a file that it can read/write it's data to
 // so that the cache is preserved between launches
-func NewCache(cacheFile string) *Cache {
+func NewCache(cacheFile string, ipfsUrl string) *Cache {
 	urlMap := make(map[string]string)
 	c := &Cache{&urlMap, &sync.RWMutex{}, shell.NewShell(ipfsUrl), cacheFile}
 
