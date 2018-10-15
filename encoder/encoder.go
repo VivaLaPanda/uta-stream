@@ -1,9 +1,9 @@
 package encoder
 
 import (
+	"bytes"
 	"io"
 	"log"
-	"os"
 	"sync"
 	"time"
 
@@ -80,29 +80,20 @@ func NewEncoder(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *E
 }
 
 // EncodeMP3 returns a channel containing the data found at the provided file
-// TODO: Rewrite this to pull from a reader and do bitrate estimations parallel with reading bytes
-func EncodeMP3(filename string, packetsPerSecond int) (*chan []byte, error) {
-	reader, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
+// Works off a reader. WARNING: Requires 2x the reader in memory until it's
+// done. Eventually this will be fixed by handling bitrate estimation and
+// streaming in parallel
+func EncodeMP3(mp3Data io.Reader, packetsPerSecond int) (*chan []byte, error) {
+	// create the pipe and tee reader
+	var bufferReader bytes.Buffer
+	sourceReader := io.TeeReader(mp3Data, &bufferReader)
 
 	// Get bitrate from first frame, and then keep updating as we calculate the avg
-	bitrate, err := estimateBitrate(reader)
-	if err != nil {
-		return nil, err
-	}
-	reader.Close()
-
-	// Pretty much have ot reopen a new reader to start from the beginning
-	// of the file
-	reader, err = os.Open(filename)
+	bitrate, err := estimateBitrate(sourceReader)
 	if err != nil {
 		return nil, err
 	}
 
-	// Warning, this will kill anything already in the nextsong spot
-	// Meaning, EncodeMP3 should never be called unless nextSong is empty
 	tmpSong := make(chan []byte, 128)
 
 	go func() {
@@ -111,7 +102,7 @@ func EncodeMP3(filename string, packetsPerSecond int) (*chan []byte, error) {
 			// Here we convert the kbps into bytes/seconds per packet so that the stream
 			// rate is correct
 			dataPacket := make([]byte, bitrate/(8*packetsPerSecond))
-			_, err = reader.Read(dataPacket)
+			_, err = bufferReader.Read(dataPacket)
 			tmpSong <- dataPacket
 		}
 	}()
@@ -155,18 +146,7 @@ func (e *Encoder) fetchNextSong() (nextSongChan *chan []byte, isEmpty bool) {
 		return nil, true
 	}
 
-	// TODO: GET RID OF THIS MONSTROSITY. IT'S SO FUCKING STUPID
-	// Encoder needs to work off af a reader, not a file
-	tempFilePath := nextSongPath[6:]
-	tempFile, err := os.Create(tempFilePath)
-	if err != nil {
-		log.Printf("Failed to write temp file. Err: %v\n", err)
-		return nil, true
-	}
-	io.Copy(tempFile, nextSongReader)
-	tempFile.Close()
-
-	nextSongChan, err = EncodeMP3(tempFilePath, e.packetsPerSecond)
+	nextSongChan, err = EncodeMP3(nextSongReader, e.packetsPerSecond)
 	if err != nil {
 		log.Printf("Failed to encode song (%v). Err: %v\n", nextSongPath, err)
 		return nil, true
@@ -179,10 +159,6 @@ func (e *Encoder) fetchNextSong() (nextSongChan *chan []byte, isEmpty bool) {
 // Returns the average bitrate of the file
 func estimateBitrate(reader io.Reader) (int, error) {
 	var err error
-	// Read bitrate from frame, make sure to copy our reader so that
-	// The actual audio stream starts from the beginning
-	// TODO: Spin this off so that the avg bitrate is calculated, not just
-	// the starting bitrate
 	var f mp3.Frame
 
 	// Decode over the file, reading the bitrate from the frames
