@@ -17,13 +17,13 @@ type Queue struct {
 }
 
 // How many minutes to wait between saves of the autoq state
-var autosaveTimer time.Duration = 10
+var autosaveTimer time.Duration = 5
 
 // Function which will provide a new autoq struct
 // An autoq must be provided a file that it can read/write it's data to
 // so that the chain is preserved between launches
-func NewQueue(qfile string, allowChainbreak bool) *Queue {
-	q := &Queue{newChain(1, allowChainbreak), make(chan string)}
+func NewQueue(qfile string, allowChainbreak bool, prefixLength int) *Queue {
+	q := &Queue{newChain(prefixLength, allowChainbreak), make(chan string)}
 
 	// startBuildListener will watch a channel for new songs and add their data into
 	// the chain
@@ -67,7 +67,9 @@ func (q *Queue) Write(filename string) error {
 		return err
 	}
 	encoder := gob.NewEncoder(qfile)
+	q.markovChain.chainLock.RLock()
 	encoder.Encode(q.markovChain.chainData)
+	q.markovChain.chainLock.RUnlock()
 
 	return nil
 }
@@ -80,7 +82,9 @@ func (q *Queue) Load(filename string) error {
 	defer file.Close()
 	if err == nil {
 		decoder := gob.NewDecoder(file)
+		q.markovChain.chainLock.Lock()
 		err = decoder.Decode(q.markovChain.chainData)
+		q.markovChain.chainLock.Unlock()
 	}
 	if err != nil {
 		return err
@@ -120,7 +124,7 @@ func (p prefix) shift(word string) {
 type chain struct {
 	chainData       *map[string][]string
 	prefix          prefix
-	chainWLock      *sync.Mutex
+	chainLock       *sync.RWMutex
 	prefixLen       int
 	allowChainbreak bool
 }
@@ -128,7 +132,7 @@ type chain struct {
 // newChain returns a new chain with prefixes of prefixLen songs
 func newChain(prefixLen int, allowChainbreak bool) *chain {
 	chainData := make(map[string][]string)
-	return &chain{&chainData, make(prefix, prefixLen), &sync.Mutex{}, prefixLen, allowChainbreak}
+	return &chain{&chainData, make(prefix, prefixLen), &sync.RWMutex{}, prefixLen, allowChainbreak}
 }
 
 // Build reads song uris from the provided channel
@@ -136,11 +140,11 @@ func newChain(prefixLen int, allowChainbreak bool) *chain {
 func (c *chain) startBuildListener(input chan string) {
 	go func() {
 		for s := range input {
-			c.chainWLock.Lock()
+			c.chainLock.Lock()
 			key := c.prefix.String()
 			(*c.chainData)[key] = append((*c.chainData)[key], s)
 			c.prefix.shift(s)
-			c.chainWLock.Unlock()
+			c.chainLock.Unlock()
 		}
 	}()
 }
@@ -148,7 +152,9 @@ func (c *chain) startBuildListener(input chan string) {
 // Returns the next song to play
 func (c *chain) generate() string {
 	// Choices represents songs it might be good to play next
+	c.chainLock.RLock()
 	choices := (*c.chainData)[c.prefix.String()]
+	c.chainLock.RUnlock()
 
 	// Randchoice provides a song randomly from the chain, without regard to the last
 	// song
@@ -169,6 +175,11 @@ func (c *chain) generate() string {
 
 	// Randomly select one of the choices
 	song := choices[rand.Intn(len(choices))]
+
+	// Handle nullsong
+	if song == "" {
+		return randChoice
+	}
 
 	return song
 }
