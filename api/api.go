@@ -158,9 +158,6 @@ func skip(e *encoder.Encoder) http.Handler {
 func play(e *encoder.Encoder) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-
-		// Encoder is in charge of skipping, not the queue
-		// Kinda weird, but it was the best way to reduce component interdependency
 		e.Play()
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "song skipped successfully")
@@ -171,8 +168,6 @@ func pause(e *encoder.Encoder) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 
-		// Encoder is in charge of skipping, not the queue
-		// Kinda weird, but it was the best way to reduce component interdependency
 		e.Pause()
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "song skipped successfully")

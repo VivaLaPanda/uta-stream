@@ -24,15 +24,19 @@ type Encoder struct {
 	playLock         *sync.Mutex
 }
 
+// Bigger packet buffer means more resiliance but may cause
+// strange behavior when skipping a song.
+var packetBufferSize = 32
+
 // Packets-per-second sacrifices reliability for synchronization
 // Higher means more synchornized streams. Minimum should be 1, super large
 // values have undefined behaviour
 // 2 is a reasonable default
 func NewEncoder(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Encoder {
-	currentSong := make(chan []byte, 128)
-	nextSong := make(chan []byte, 128)
+	currentSong := make(chan []byte, packetBufferSize)
+	nextSong := make(chan []byte, packetBufferSize)
 	encoder := &Encoder{
-		Output:           make(chan []byte, 128),
+		Output:           make(chan []byte, packetBufferSize),
 		packetsPerSecond: packetsPerSecond,
 		currentSong:      &currentSong,
 		nextSong:         &nextSong,
@@ -94,7 +98,7 @@ func EncodeMP3(mp3Data io.Reader, packetsPerSecond int) (*chan []byte, error) {
 		return nil, err
 	}
 
-	tmpSong := make(chan []byte, 128)
+	tmpSong := make(chan []byte, packetBufferSize)
 
 	go func() {
 		// Read file for audio stream
