@@ -20,7 +20,7 @@ func TestWrite(t *testing.T) {
 	// Ensure the file isn't already there.
 	autoqTestfile := "TestWriteQfile.test"
 	cleanupAutoq(autoqTestfile)
-	q := NewQueue(autoqTestfile, false, 1)
+	q := NewAQEngine(autoqTestfile, false, 1)
 	_, err := os.Stat(autoqTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)
@@ -39,7 +39,7 @@ func TestLoad(t *testing.T) {
 	// Ensure the file isn't already there.
 	autoqTestfile := "TestLoadQfile.test"
 	cleanupAutoq(autoqTestfile)
-	q := NewQueue(autoqTestfile, false, 1)
+	q := NewAQEngine(autoqTestfile, false, 1)
 	_, err := os.Stat(autoqTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)
@@ -59,7 +59,7 @@ func TestNotifyPlayed(t *testing.T) {
 	// Ensure the file isn't already there.
 	autoqTestfile := "TestLoadQfile.test"
 	cleanupAutoq(autoqTestfile)
-	q := NewQueue(autoqTestfile, false, 1)
+	q := NewAQEngine(autoqTestfile, false, 1)
 	_, err := os.Stat(autoqTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)
@@ -75,7 +75,7 @@ func TestVpop(t *testing.T) {
 	// Ensure the file isn't already there.
 	autoqTestfile := "TestLoadQfile.test"
 	cleanupAutoq(autoqTestfile)
-	q := NewQueue(autoqTestfile, false, 1)
+	q := NewAQEngine(autoqTestfile, false, 1)
 	_, err := os.Stat(autoqTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)

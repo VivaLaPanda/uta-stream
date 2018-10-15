@@ -6,6 +6,7 @@ import (
 	"github.com/VivaLaPanda/uta-stream/api"
 	"github.com/VivaLaPanda/uta-stream/mixer"
 	"github.com/VivaLaPanda/uta-stream/queue"
+	"github.com/VivaLaPanda/uta-stream/queue/auto"
 	"github.com/VivaLaPanda/uta-stream/resource/cache"
 	"github.com/VivaLaPanda/uta-stream/stream"
 )
@@ -24,7 +25,8 @@ var audioPort = flag.Int("audioPort", 9090, "Which port to serve the audio strea
 func main() {
 	flag.Parse()
 
-	q := queue.NewQueue(*autoqFilename, *enableAutoq, *allowChainbreak, *autoQPrefixLen)
+	a := auto.NewAQEngine(*autoqFilename, *allowChainbreak, *autoQPrefixLen)
+	q := queue.NewQueue(a, *enableAutoq)
 	c := cache.NewCache(*cacheFilename, *ipfsUrl)
 	e := mixer.NewMixer(q, c, *packetsPerSecond)
 
