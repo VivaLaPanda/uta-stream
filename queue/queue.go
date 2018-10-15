@@ -6,15 +6,14 @@ import (
 
 type Queue struct {
 	fifo         []string
-	autoq        *auto.Queue
+	autoq        *auto.AQEngine
 	AutoqEnabled bool
 }
 
 // Make a new q structure. allowChainbreak will make the autoq more random
-// TODO: Split this and pass in an autoq instead of making one during construction
-func NewQueue(autoqFilename string, enableAutoq bool, allowChainbreak bool, prefixLength int) *Queue {
+func NewQueue(aqEngine *auto.AQEngine, enableAutoq bool) *Queue {
 	return &Queue{
-		autoq:        auto.NewQueue(autoqFilename, allowChainbreak, prefixLength),
+		autoq:        aqEngine,
 		AutoqEnabled: enableAutoq}
 }
 

@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-type Queue struct {
+type AQEngine struct {
 	markovChain *chain
 	playedSongs chan string
 }
@@ -22,8 +22,8 @@ var autosaveTimer time.Duration = 5
 // Function which will provide a new autoq struct
 // An autoq must be provided a file that it can read/write it's data to
 // so that the chain is preserved between launches
-func NewQueue(qfile string, allowChainbreak bool, prefixLength int) *Queue {
-	q := &Queue{newChain(prefixLength, allowChainbreak), make(chan string)}
+func NewAQEngine(qfile string, allowChainbreak bool, prefixLength int) *AQEngine {
+	q := &AQEngine{newChain(prefixLength, allowChainbreak), make(chan string)}
 
 	// startBuildListener will watch a channel for new songs and add their data into
 	// the chain
@@ -60,7 +60,7 @@ func NewQueue(qfile string, allowChainbreak bool, prefixLength int) *Queue {
 
 // Method which will write the autoq data to the provided file. Will overwrite
 // a file if one already exists at that location.
-func (q *Queue) Write(filename string) error {
+func (q *AQEngine) Write(filename string) error {
 	qfile, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0660)
 	defer qfile.Close()
 	if err != nil {
@@ -77,7 +77,7 @@ func (q *Queue) Write(filename string) error {
 // Method which will load the provided autoq data file. Will overwrite the internal
 // state of the object. Should pretty much only be used when the object is created
 // but it is left public in case a client needs to load old data or something
-func (q *Queue) Load(filename string) error {
+func (q *AQEngine) Load(filename string) error {
 	file, err := os.Open(filename)
 	defer file.Close()
 	if err == nil {
@@ -94,13 +94,13 @@ func (q *Queue) Load(filename string) error {
 }
 
 // Vpop simply returns the next song according to the Markov chain
-func (q *Queue) Vpop() string {
+func (q *AQEngine) Vpop() string {
 	return q.markovChain.generate()
 }
 
 // The interface for external callers to add to the markov chain
 // In our case we use it to notify the chain that a song was played in full
-func (q *Queue) NotifyPlayed(filename string) {
+func (q *AQEngine) NotifyPlayed(filename string) {
 	q.playedSongs <- filename
 }
 

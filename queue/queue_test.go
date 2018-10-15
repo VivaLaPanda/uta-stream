@@ -3,6 +3,8 @@ package queue
 import (
 	"os"
 	"testing"
+
+	"github.com/VivaLaPanda/uta-stream/queue/auto"
 )
 
 func cleanupAutoq(autoqTestfile string) {
@@ -18,7 +20,8 @@ func cleanupAutoq(autoqTestfile string) {
 func TestPop(t *testing.T) {
 	autoqTestfile := "autoqTestPop.test"
 	// Make sure the q starts empty
-	q := NewQueue(autoqTestfile, false, false, 1)
+	a := auto.NewAQEngine(autoqTestfile, false, 1)
+	q := NewQueue(a, false)
 	song, isEmpty := q.Pop()
 	if isEmpty == false {
 		t.Errorf("Queue didn't start empty. isEmpty was false.\n")
@@ -45,7 +48,8 @@ func TestPop(t *testing.T) {
 func TestPlayNext(t *testing.T) {
 	autoqTestfile := "autoqTestPlayNext.test"
 	// Make sure the q starts empty
-	q := NewQueue(autoqTestfile, false, false, 1)
+	a := auto.NewAQEngine(autoqTestfile, false, 1)
+	q := NewQueue(a, false)
 	song, isEmpty := q.Pop()
 	if isEmpty == false {
 		t.Errorf("Queue didn't start empty. isEmpty was false.\n")
