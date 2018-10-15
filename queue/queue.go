@@ -52,6 +52,7 @@ func (q *Queue) AddToQueue(ipfsPath string) {
 // TODO: This is sorta broken because of how me mix current/next song
 // Will actually add as second-next song. Need some way to go to Encoder
 // and requeue next song, dump it from the encoder, and then have the encoder pop the q
+// https://github.com/VivaLaPanda/uta-stream/issues/4
 func (q *Queue) PlayNext(ipfsPath string) {
 	q.fifo = append([]string{ipfsPath}, q.fifo...)
 }

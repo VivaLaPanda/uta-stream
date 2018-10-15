@@ -27,6 +27,7 @@ func Download(rawurl string, ipfs *shell.Shell, removeMp4 bool) (ipfsPath string
 	urlToDL, err := url.Parse(rawurl)
 	if err != nil {
 		// TODO: Eventually do a text-search of youtube and just DL top result
+		// https://github.com/VivaLaPanda/uta-stream/issues/1
 		return "", err
 	}
 
@@ -40,7 +41,6 @@ func Download(rawurl string, ipfs *shell.Shell, removeMp4 bool) (ipfsPath string
 	case "youtube.com", "youtu.be":
 		return downloadYoutube(*urlToDL, ipfs, removeMp4)
 	default:
-		// TODO: Eventually do a text-search of youtube and just DL top result
 		return "", fmt.Errorf("URL hostname (%v) doesn't match a known provider.\n"+
 			"Should be one of: %v\n", urlToDL.Hostname(), knownProviders)
 	}
