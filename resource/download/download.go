@@ -17,8 +17,11 @@ var knownProviders = [...]string{"youtube.com", "youtu.be"}
 var tempDLFolder = "TEMP-DL"
 
 // Master download router. Looks at the url and determins which service needs
-// to hand the url
-func Download(rawurl string, ipfs *shell.Shell, removeMp4 bool) (ipfsPath string, err error) {
+// to hand the url. streamData is used to allow for playing the audio
+// without waiting for the DL to finish. If you pass a writer the data will be
+// pushed into that reader at the same time it's written to disk. I recommend
+// a buffered reader, as I'm using TeeReader which works best with buffers
+func Download(rawurl string, ipfs *shell.Shell, streamData io.Writer) (ipfsPath string, err error) {
 	// Ensure the temporary directory for storing downloads exists
 	if _, err = os.Stat(tempDLFolder); os.IsNotExist(err) {
 		os.Mkdir(tempDLFolder, os.ModePerm)
@@ -35,14 +38,14 @@ func Download(rawurl string, ipfs *shell.Shell, removeMp4 bool) (ipfsPath string
 	// Route to different handlers based on hostname
 	switch urlToDL.Hostname() {
 	case "youtube.com", "youtu.be", "www.youtube.com":
-		return downloadYoutube(*urlToDL, ipfs, removeMp4)
+		return downloadYoutube(*urlToDL, ipfs, streamData)
 	default:
 		return "", fmt.Errorf("URL hostname (%v) doesn't match a known provider.\n"+
 			"Should be one of: %v\n", urlToDL.Hostname(), knownProviders)
 	}
 }
 
-func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, removeMp4 bool) (ipfsPath string, err error) {
+func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, streamData io.Writer) (ipfsPath string, err error) {
 	// Get the info for the video
 	var vidInfo *ytdl.VideoInfo
 	switch urlToDL.Hostname() {
@@ -88,18 +91,23 @@ func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, removeMp4 bool) (ipfsPa
 		dlDone.Done()
 	}()
 
-	// TEMP: Right now we'll just write to a file, eventually we will expose
-	// the stream so we can play right away
-	fileLocation := filepath.Join(tempDLFolder, vidInfo.Title+".mp3")
+	// Write to file and potentially the provided streamData
+	fileLocation := filepath.Join(tempDLFolder, vidInfo.ID+".mp3")
 	_ = os.MkdirAll(filepath.Dir(fileLocation), os.ModePerm)
 	mp3File, err := os.Create(fileLocation)
 	if err != nil {
-		return "", fmt.Errorf("failed to create mp4 file. Err: %v", err)
+		return "", fmt.Errorf("failed to create mp3 file. Err: %v", err)
 	}
 	go func() {
-		io.Copy(mp3File, convOutput)
+		var sharedReader io.Reader
+		if streamData != nil {
+			sharedReader = io.TeeReader(convOutput, streamData)
+		} else {
+			sharedReader = convOutput
+		}
+
+		io.Copy(mp3File, sharedReader)
 		log.Printf("Conversion to mp3 complete\n")
-		convOutput.Close()
 		mp3File.Close()
 	}()
 

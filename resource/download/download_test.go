@@ -1,6 +1,7 @@
 package download
 
 import (
+	"bufio"
 	"io"
 	"net/url"
 	"os"
@@ -48,7 +49,13 @@ func TestDownloadYoutube(t *testing.T) {
 		t.Errorf("TestDownloadYoutube failed to parse the test url: %v", err)
 	}
 
-	ipfsPath, err := downloadYoutube(*urlToDL, sh, false)
+	// Setup file for streamData
+	outputFile, _ := os.Create("test_split.mp3.test")
+	defer outputFile.Close()
+	bWriter := bufio.NewWriter(outputFile)
+
+	// Commence the download
+	ipfsPath, err := downloadYoutube(*urlToDL, sh, bWriter)
 	if err != nil {
 		t.Errorf("TestDownloadYoutube failed due to an error: %v", err)
 	}
@@ -64,7 +71,7 @@ func TestDownload(t *testing.T) {
 	// Setup shell and testing url
 	sh := shell.NewShell(ipfsUrl)
 
-	ipfsPath, err := Download(rawUrl, sh, false)
+	ipfsPath, err := Download(rawUrl, sh, nil)
 	if err != nil {
 		t.Errorf("TestDownloadYoutube failed due to an error: %v", err)
 	}
