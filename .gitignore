@@ -11,6 +11,8 @@
 # Stuff used for testing, these will be generated on running tests
 test_song.mp3
 **/TEMP-DL
+*.db
+debug
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
