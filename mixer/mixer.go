@@ -59,6 +59,7 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 				// We can succesfully read from the current song, all is good
 			case broadcastPacket = <-*mixer.nextSong:
 				// We couldn't play from current, assume that the song ended
+				mixer.queue.NotifyDone(mixer.currentSongPath)
 				mixer.currentSong = mixer.nextSong
 				mixer.currentSongPath = mixer.nextSongPath
 				temp, isEmpty := mixer.fetchNextSong()
@@ -86,7 +87,8 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 	return mixer
 }
 
-// Will swap the next song in place of the cuurent one.
+// Will swap the next song in place of the current one.
+// TODO: Fails because fetchNextSong could be empty
 func (m *Mixer) Skip() {
 	m.currentSong = m.nextSong
 	m.currentSongPath = m.nextSongPath
