@@ -28,8 +28,8 @@ type Mixer struct {
 }
 
 // Bigger packet buffer means more resiliance but may cause
-// strange behavior when skipping a song.
-var packetBufferSize = 32
+// strange behavior when skipping a song. In my experience a small value is best
+var packetBufferSize = 8
 
 // Packets-per-second sacrifices reliability for synchronization
 // Higher means more synchornized streams. Minimum should be 1, super large
@@ -77,7 +77,10 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 					mixer.currentSong = tempSong
 					mixer.currentSongPath = tempPath
 				}
-				time.Sleep(10 * time.Second)
+				// This will hammer the queue if autoq is off
+				// Not sure if that's a problem?
+				// TODO: investiage if it is
+				time.Sleep(1 * time.Second)
 			}
 
 			// This lock is used to remotely pause here if necessary.
