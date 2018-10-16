@@ -21,44 +21,49 @@ func EncodeMP3(mp3Data io.Reader, packetsPerSecond int) (*chan []byte, error) {
 	var bufferReader bytes.Buffer
 	sourceReader := io.TeeReader(mp3Data, &bufferReader)
 
-	// Get bitrate from first frame, and then keep updating as we calculate the avg
-	bitrate, err := estimateBitrate(sourceReader)
-	if err != nil {
-		return nil, err
-	}
+	// Start estimating the bitrate
+	currentEstimate := estimateBitrate(sourceReader)
 
 	tmpSong := make(chan []byte, packetBufferSize)
 
 	go func() {
 		// Read file for audio stream
+		var err error
 		for err == nil {
 			// Here we convert the kbps into bytes/seconds per packet so that the stream
 			// rate is correct
+			bitrate := <-currentEstimate
 			dataPacket := make([]byte, bitrate/(8*packetsPerSecond))
 			_, err = bufferReader.Read(dataPacket)
 			tmpSong <- dataPacket
 		}
+		close(tmpSong)
 	}()
 
 	return &tmpSong, nil
 }
 
 // Returns the average bitrate of the file
-func estimateBitrate(reader io.Reader) (int, error) {
+func estimateBitrate(reader io.Reader) (currentEstimate chan int) {
 	var err error
 	var f mp3.Frame
+	currentEstimate = make(chan int, 5)
 
 	// Decode over the file, reading the bitrate from the frames
 	// until we reach the end. Calculate the average
-	decoder := mp3.NewDecoder(reader)
-	skipped := 0
-	averageBitrate := 0
-	sumBitrate := 0
-	for count := 1; err == nil; count++ {
-		err = decoder.Decode(&f, &skipped)
-		sumBitrate = sumBitrate + int(f.Header().BitRate())
-		averageBitrate = sumBitrate / count
-	}
+	go func() {
+		decoder := mp3.NewDecoder(reader)
+		skipped := 0
+		averageBitrate := 0
+		sumBitrate := 0
+		for count := 1; err == nil; count++ {
+			err = decoder.Decode(&f, &skipped)
+			sumBitrate = sumBitrate + int(f.Header().BitRate())
+			averageBitrate = sumBitrate / count
+			currentEstimate <- averageBitrate
+		}
+		close(currentEstimate)
+	}()
 
-	return averageBitrate, nil
+	return currentEstimate
 }
