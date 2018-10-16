@@ -18,6 +18,7 @@ type Cache struct {
 	urlMapLock    *sync.RWMutex
 	ipfs          *shell.Shell
 	cacheFilename string
+	Hotstream     io.Reader
 }
 
 // How many minutes to wait between saves of the cache state
@@ -30,7 +31,7 @@ var autosaveTimer time.Duration = 30
 // so that the cache is preserved between launches
 func NewCache(cacheFile string, ipfsUrl string) *Cache {
 	urlMap := make(map[string]string)
-	c := &Cache{&urlMap, &sync.RWMutex{}, shell.NewShell(ipfsUrl), cacheFile}
+	c := &Cache{&urlMap, &sync.RWMutex{}, shell.NewShell(ipfsUrl), cacheFile, nil}
 
 	// Confirm we can interact with our persitent storage
 	_, err := os.Stat(cacheFile)
@@ -96,15 +97,29 @@ func (c *Cache) Load(filename string) error {
 	return nil
 }
 
-func (c *Cache) UrlCacheLookup(url string) (ipfsPath string, err error) {
+func (c *Cache) UrlCacheLookup(url string, urgent bool) (ipfsPath string, err error) {
+	// Check the cache for the provided URL
 	c.urlMapLock.RLock()
 	ipfsPath, exists := (*c.urlMap)[url]
 	c.urlMapLock.RUnlock()
+
 	if !exists {
-		ipfsPath, err = download.Download(url, c.ipfs, true)
+		// We've been told the request is urgent, expose the audio data
+		// as we work so consumers can get it before we are finished
+		var hotstreamWriter io.Writer
+		if urgent {
+			c.Hotstream, hotstreamWriter = io.Pipe()
+		} else {
+			c.Hotstream = nil
+		}
+
+		// Go fetch the provided URL
+		ipfsPath, err = download.Download(url, c.ipfs, hotstreamWriter)
 		if err != nil {
 			return "", fmt.Errorf(("failed to DL requested resource: %v\nerr:%v"), url, err)
 		}
+
+		// Create the URL => ipfs mapping in the cache
 		c.urlMapLock.Lock()
 		(*c.urlMap)[url] = ipfsPath
 		c.urlMapLock.Unlock()
@@ -115,7 +130,7 @@ func (c *Cache) UrlCacheLookup(url string) (ipfsPath string, err error) {
 }
 
 func (c *Cache) FetchUrl(url string) (ipfsPath string, r io.ReadCloser, err error) {
-	ipfsPath, err = c.UrlCacheLookup(url)
+	ipfsPath, err = c.UrlCacheLookup(url, false)
 	if err != nil {
 		return ipfsPath, nil, err
 	}

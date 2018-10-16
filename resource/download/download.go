@@ -1,6 +1,7 @@
 package download
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
@@ -100,8 +101,9 @@ func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, streamData io.Writer) (
 	}
 	go func() {
 		var sharedReader io.Reader
+		bufStreamData := bufio.NewWriter(streamData)
 		if streamData != nil {
-			sharedReader = io.TeeReader(convOutput, streamData)
+			sharedReader = io.TeeReader(convOutput, bufStreamData)
 		} else {
 			sharedReader = convOutput
 		}

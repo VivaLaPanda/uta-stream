@@ -1,6 +1,7 @@
 package mixer
 
 import (
+	"io"
 	"log"
 	"sync"
 	"time"
@@ -122,16 +123,28 @@ func (m *Mixer) Pause() {
 // Will go to queue and get the next track
 func (m *Mixer) fetchNextSong() (nextSongChan *chan []byte, nextSongPath string, isEmpty bool) {
 	nextSongPath, isEmpty = m.queue.Pop()
+	var nextSongReader io.Reader
+	var err error
 	if isEmpty {
-		return nil, "", true
+		if m.cache.Hotstream != nil {
+			// The queue is empty but we have a hotstream, which means something
+			// is being converted urgently for us. Just start playing, ipfs/songdata
+			// will show up as unknown
+			nextSongReader = m.cache.Hotstream
+		} else {
+			// Empty and now hotstream, there really is nothing for us to do
+			return nil, "", true
+		}
+	} else {
+		// The queue isn't empty so we'll go get the provided song
+		nextSongReader, err = m.cache.FetchIpfs(nextSongPath)
+		if err != nil {
+			log.Printf("Failed to fetch song (%v). Err: %v\n", nextSongPath, err)
+			return nil, "", true
+		}
 	}
 
-	nextSongReader, err := m.cache.FetchIpfs(nextSongPath)
-	if err != nil {
-		log.Printf("Failed to fetch song (%v). Err: %v\n", nextSongPath, err)
-		return nil, "", true
-	}
-
+	// Start encoding for broadcast
 	nextSongChan, err = encoder.EncodeMP3(nextSongReader, m.packetsPerSecond)
 	if err != nil {
 		log.Printf("Failed to encode song (%v). Err: %v\n", nextSongPath, err)
