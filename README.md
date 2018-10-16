@@ -7,10 +7,9 @@ Core features:
 * Pull from various media sources (ipfs, youtube, soundcloud, etc) (playlist support is a must)
 * Do more than just a streaming mp3/m3u, create a Discord bot that plays the stream
 * Highly configurable options for automatic/manual queue management
-    - Auto mode: Simple markov-based playing of previously queued songs
     - DJ mode: Single user queues tracks (requests?)
     - Community mode: Any user queues tracks
-    - Hybrid mode: Auto mode, but users can queue and all manually queued songs will be played before going back to the auto-queue
+    - Hybrid mode: Community mode but imple markov-based playing of previously queued songs if the queue is empty
 
 ## Installing
 * Install IPFS (https://ipfs.io/) and start daemon
@@ -20,8 +19,6 @@ Core features:
 ## Contributing
 The progress is now in a state where contributions would be welcome. Pull requests
 are welcome and I'm excited to work with the community on this project.
-The code is scattered with TODO tags, those could use work and I'll
-convert them to issues soon.
 
 Contribution guidelines are there, but to be honest
 this is a small project, just use common sense.
@@ -41,11 +38,14 @@ Done:
 In Progress:
 * Downloaders
     - soundcloud
+* Song info cache (ipfsHash -> Title/etc.)
+* Optional tiny frontend for interacting with API
 
 Ready to start:
 * DJ Mode (only one user can queue)
 * Permissions (Key-based)
-* Fixing up encoder to work off stream not file
+* Share download/info caches (support network urls instead of local FS, or both at once and a syncing mechanism)
+    - Possibly means moving caches into SQL
 
 Stretch goals:
 * Discord bot stuff
