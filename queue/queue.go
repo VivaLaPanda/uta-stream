@@ -62,6 +62,10 @@ func (q *Queue) Dump() {
 	q.fifo = make([]string, 0)
 }
 
+func (q *Queue) Length() int {
+	return len(q.fifo)
+}
+
 // Used as a gateway to let the autoq know a song was played. For training the
 // qutoqueue
 func (q *Queue) NotifyDone(ipfsPath string) {

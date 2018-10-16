@@ -20,7 +20,7 @@ func TestWrite(t *testing.T) {
 	// Ensure the file isn't already there.
 	cacheTestfile := "TestWriteCacheFile.test"
 	cleanupCache(cacheTestfile)
-	c := NewCache(cacheTestfile)
+	c := NewCache(cacheTestfile, "localhost:5001")
 	_, err := os.Stat(cacheTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat cacheFile after initing cache. Err: %v\n", err)
@@ -39,7 +39,7 @@ func TestLoad(t *testing.T) {
 	// Ensure the file isn't already there.
 	cacheTestfile := "TestLoadCacheFile.test"
 	cleanupCache(cacheTestfile)
-	c := NewCache(cacheTestfile)
+	c := NewCache(cacheTestfile, "localhost:5001")
 	_, err := os.Stat(cacheTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat cacheFile after initing cache. Err: %v\n", err)
@@ -58,7 +58,7 @@ func TestFetchUrl(t *testing.T) {
 	// Ensure the file isn't already there.
 	cacheTestfile := "TestLoadCacheFile.test"
 	cleanupCache(cacheTestfile)
-	c := NewCache(cacheTestfile)
+	c := NewCache(cacheTestfile, "localhost:5001")
 	_, err := os.Stat(cacheTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat cacheFile after initing cache. Err: %v\n", err)

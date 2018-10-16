@@ -107,9 +107,10 @@ func enqueue(q *queue.Queue, c *cache.Cache) http.Handler {
 
 		// If we're looking at an ipfs path just leave as is
 		// Otherwise go and fetch it
+		urgent := q.Length() == 0
 		if resourceToQueue[:6] != "/ipfs/" {
 			var err error
-			resourceToQueue, err = c.UrlCacheLookup(resourceToQueue)
+			resourceToQueue, err = c.UrlCacheLookup(resourceToQueue, urgent)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				fmt.Fprintf(w, "enqueue encountered an unexpected error: %v", err)
@@ -117,7 +118,9 @@ func enqueue(q *queue.Queue, c *cache.Cache) http.Handler {
 			}
 		}
 
-		q.AddToQueue(resourceToQueue)
+		if !urgent {
+			q.AddToQueue(resourceToQueue)
+		}
 
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, "enqueue successfully enqueued audio at: %v", resourceToQueue)
@@ -137,7 +140,7 @@ func playnext(q *queue.Queue, c *cache.Cache) http.Handler {
 		}
 
 		// TODO: This assumes we're only dealing with urls, doesn't check ipfs
-		ipfsPath, err := c.UrlCacheLookup(resourceToQueue)
+		ipfsPath, err := c.UrlCacheLookup(resourceToQueue, false)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(w, "playnext encountered an unexpected error: %v", err)
