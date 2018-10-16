@@ -40,6 +40,7 @@ In Progress:
     - soundcloud
 * Song info cache (ipfsHash -> Title/etc.)
 * Optional tiny frontend for interacting with API
+* Playlist support
 
 Ready to start:
 * DJ Mode (only one user can queue)
