@@ -54,23 +54,28 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 	go func() {
 		for true {
 			var broadcastPacket []byte
-			select {
-			case broadcastPacket = <-*mixer.currentSong:
+
+			if len(*mixer.currentSong) != 0 {
+				broadcastPacket = <-*mixer.currentSong
 				// We can succesfully read from the current song, all is good
-			case broadcastPacket = <-*mixer.nextSong:
+			} else if len(*mixer.nextSong) != 0 {
+				broadcastPacket = <-*mixer.nextSong
 				// We couldn't play from current, assume that the song ended
 				mixer.queue.NotifyDone(mixer.currentSongPath)
 				mixer.currentSong = mixer.nextSong
 				mixer.currentSongPath = mixer.nextSongPath
-				temp, isEmpty := mixer.fetchNextSong()
+				tempSong, tempPath, isEmpty := mixer.fetchNextSong()
 				if !isEmpty {
-					mixer.nextSong = temp
+					mixer.nextSong = tempSong
+					mixer.nextSongPath = tempPath
 				}
-			default:
-				// Both current and next are empty,
-				temp, isEmpty := mixer.fetchNextSong()
+			} else {
+				// Both are empty, we really have nothing to do. Wait 10 seconds and try
+				// again
+				tempSong, tempPath, isEmpty := mixer.fetchNextSong()
 				if !isEmpty {
-					mixer.nextSong = temp
+					mixer.currentSong = tempSong
+					mixer.currentSongPath = tempPath
 				}
 				time.Sleep(10 * time.Second)
 			}
@@ -92,7 +97,7 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 func (m *Mixer) Skip() {
 	m.currentSong = m.nextSong
 	m.currentSongPath = m.nextSongPath
-	m.nextSong, _ = m.fetchNextSong()
+	m.nextSong, m.currentSongPath, _ = m.fetchNextSong()
 }
 
 // Will toggle playing by allowing writes to output
@@ -112,24 +117,23 @@ func (m *Mixer) Pause() {
 }
 
 // Will go to queue and get the next track
-func (m *Mixer) fetchNextSong() (nextSongChan *chan []byte, isEmpty bool) {
-	nextSongPath, isEmpty := m.queue.Pop()
+func (m *Mixer) fetchNextSong() (nextSongChan *chan []byte, nextSongPath string, isEmpty bool) {
+	nextSongPath, isEmpty = m.queue.Pop()
 	if isEmpty {
-		return nil, true
+		return nil, "", true
 	}
 
 	nextSongReader, err := m.cache.FetchIpfs(nextSongPath)
 	if err != nil {
 		log.Printf("Failed to fetch song (%v). Err: %v\n", nextSongPath, err)
-		return nil, true
+		return nil, "", true
 	}
 
 	nextSongChan, err = encoder.EncodeMP3(nextSongReader, m.packetsPerSecond)
 	if err != nil {
 		log.Printf("Failed to encode song (%v). Err: %v\n", nextSongPath, err)
-		return nil, true
+		return nil, "", true
 	}
-	m.nextSongPath = nextSongPath
 
-	return nextSongChan, false
+	return nextSongChan, nextSongPath, false
 }
