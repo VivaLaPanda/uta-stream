@@ -107,7 +107,7 @@ func enqueue(q *queue.Queue, c *cache.Cache) http.Handler {
 
 		// If we're looking at an ipfs path just leave as is
 		// Otherwise go and fetch it
-		urgent := q.Length() == 0
+		urgent := q.IsEmpty()
 		if resourceToQueue[:6] != "/ipfs/" {
 			var err error
 			resourceToQueue, err = c.UrlCacheLookup(resourceToQueue, urgent)

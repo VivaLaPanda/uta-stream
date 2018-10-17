@@ -29,6 +29,11 @@ func EncodeMP3(mp3Data io.Reader, packetsPerSecond int) (*chan []byte, error) {
 	tmpSong := make(chan []byte, packetBufferSize)
 
 	go func() {
+		// Handling panic on closed send. If the encoder dies, so be it.
+		defer func() {
+			recover()
+		}()
+
 		// Read file for audio stream
 		var err error
 		for err == nil {
