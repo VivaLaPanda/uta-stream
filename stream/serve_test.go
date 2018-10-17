@@ -8,7 +8,7 @@ import (
 )
 
 func TestServeAudioOverHttp(t *testing.T) {
-	filename := "test_counting.mp3"
+	filename := "test_music.mp3"
 	fileR, err := os.Open(filename)
 
 	// Start pulling data from file into the channel
