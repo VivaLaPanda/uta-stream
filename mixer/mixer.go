@@ -20,11 +20,9 @@ type Mixer struct {
 	Output           chan []byte
 	packetsPerSecond int
 	currentSong      *chan []byte
-	nextSong         *chan []byte
 	queue            *queue.Queue
 	cache            *cache.Cache
 	currentSongPath  string
-	nextSongPath     string
 	playLock         *sync.Mutex
 }
 
@@ -38,58 +36,41 @@ var packetBufferSize = 8
 // 2 is a reasonable default
 func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mixer {
 	currentSong := make(chan []byte, packetBufferSize)
-	nextSong := make(chan []byte, packetBufferSize)
 	mixer := &Mixer{
 		Output:           make(chan []byte, packetBufferSize),
 		packetsPerSecond: packetsPerSecond,
 		currentSong:      &currentSong,
-		nextSong:         &nextSong,
 		queue:            queue,
 		cache:            cache,
 		currentSongPath:  "",
-		nextSongPath:     "",
 		playLock:         &sync.Mutex{}}
-
+	close(currentSong)
 	// Spin up the job to cast from the current song to our output
 	// and handle song transitions
 	go func() {
 		for true {
-			var broadcastPacket []byte
-
-			if len(*mixer.currentSong) != 0 {
-				broadcastPacket = <-*mixer.currentSong
+			for broadcastPacket := range *mixer.currentSong {
 				// We can succesfully read from the current song, all is good
-			} else if len(*mixer.nextSong) != 0 {
-				broadcastPacket = <-*mixer.nextSong
-				// We couldn't play from current, assume that the song ended
-				mixer.queue.NotifyDone(mixer.currentSongPath)
-				mixer.currentSong = mixer.nextSong
-				mixer.currentSongPath = mixer.nextSongPath
-				tempSong, tempPath, isEmpty := mixer.fetchNextSong()
-				if !isEmpty {
-					mixer.nextSong = tempSong
-					mixer.nextSongPath = tempPath
-				}
-			} else {
-				// Both are empty, we really have nothing to do. Wait 10 seconds and try
-				// again
-				tempSong, tempPath, isEmpty := mixer.fetchNextSong()
-				if !isEmpty {
-					mixer.currentSong = tempSong
-					mixer.currentSongPath = tempPath
-				}
-				// This will hammer the queue if autoq is off
-				// Not sure if that's a problem?
-				// TODO: investiage if it is
-				time.Sleep(1 * time.Second)
-			}
 
-			// This lock is used to remotely pause here if necessary.
-			// If the lock is unlocked, all that will happen is the program moving on,
-			// otherwise we will wait until the lock is released elsewhere
-			mixer.playLock.Lock()
-			mixer.playLock.Unlock()
-			mixer.Output <- broadcastPacket
+				// This lock is used to remotely pause here if necessary.
+				// If the lock is unlocked, all that will happen is the program moving on,
+				// otherwise we will wait until the lock is released elsewhere
+				mixer.playLock.Lock()
+				mixer.playLock.Unlock()
+				mixer.Output <- broadcastPacket
+			}
+			// We couldn't play from current, assume that the song ended
+			if mixer.currentSongPath != "" {
+				mixer.queue.NotifyDone(mixer.currentSongPath)
+			}
+			tempSong, tempPath, isEmpty := mixer.fetchNextSong()
+			if !isEmpty && (tempSong != nil) {
+				mixer.currentSong = tempSong
+				mixer.currentSongPath = tempPath
+				broadcastPacket := <-*mixer.currentSong
+				mixer.Output <- broadcastPacket
+			}
+			time.Sleep(1 * time.Second)
 		}
 	}()
 
@@ -97,11 +78,12 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 }
 
 // Will swap the next song in place of the current one.
-// TODO: Fails because fetchNextSong could be empty
 func (m *Mixer) Skip() {
-	m.currentSong = m.nextSong
-	m.currentSongPath = m.nextSongPath
-	m.nextSong, m.currentSongPath, _ = m.fetchNextSong()
+	tempSong, tempPath, isEmpty := m.fetchNextSong()
+	if !isEmpty {
+		m.currentSong = tempSong
+		m.currentSongPath = tempPath
+	}
 }
 
 // Will toggle playing by allowing writes to output
