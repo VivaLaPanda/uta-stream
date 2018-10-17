@@ -43,6 +43,16 @@ func (q *Queue) Pop() (ipfsPath string, emptyq bool) {
 	return song, false
 }
 
+func (q *Queue) IsEmpty() bool {
+	if len(q.fifo) == 0 {
+		if !q.AutoqEnabled {
+			return true
+		}
+	}
+
+	return false
+}
+
 // Add the provided song to the queue at the back
 func (q *Queue) AddToQueue(ipfsPath string) {
 	q.fifo = append(q.fifo, ipfsPath)

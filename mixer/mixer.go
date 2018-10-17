@@ -59,10 +59,13 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 				mixer.playLock.Unlock()
 				mixer.Output <- broadcastPacket
 			}
+
 			// We couldn't play from current, assume that the song ended
 			if mixer.currentSongPath != "" {
+				// If we were just playing something unknown, the autoq don't care
 				mixer.queue.NotifyDone(mixer.currentSongPath)
 			}
+
 			tempSong, tempPath, isEmpty := mixer.fetchNextSong()
 			if !isEmpty && (tempSong != nil) {
 				mixer.currentSong = tempSong
@@ -79,11 +82,7 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 
 // Will swap the next song in place of the current one.
 func (m *Mixer) Skip() {
-	tempSong, tempPath, isEmpty := m.fetchNextSong()
-	if !isEmpty {
-		m.currentSong = tempSong
-		m.currentSongPath = tempPath
-	}
+	close(*m.currentSong)
 }
 
 // Will toggle playing by allowing writes to output
