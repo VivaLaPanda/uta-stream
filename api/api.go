@@ -122,6 +122,7 @@ func queuer(q *queue.Queue, c *cache.Cache, info *metadata.Cache, qFunc QFunc) h
 					var err error
 					resourceToQueue, err = c.UrlCacheLookup(resourceToQueue, urgent)
 					if err != nil {
+						log.Printf("Failed to enqueue song, err: %v", err)
 						return
 					}
 					qFunc(resourceToQueue)
