@@ -4,6 +4,8 @@ import (
 	"io"
 	"os"
 	"testing"
+
+	"github.com/VivaLaPanda/uta-stream/resource/metadata"
 )
 
 func cleanupCache(cacheTestfile string) {
@@ -19,8 +21,11 @@ func cleanupCache(cacheTestfile string) {
 func TestWrite(t *testing.T) {
 	// Ensure the file isn't already there.
 	cacheTestfile := "TestWriteCacheFile.test"
+	metadataTestfile := "metadataCache.test"
 	cleanupCache(cacheTestfile)
-	c := NewCache(cacheTestfile, "localhost:5001")
+	cleanupCache(metadataTestfile)
+	meta := metadata.NewCache(metadataTestfile)
+	c := NewCache(cacheTestfile, meta, "localhost:5001")
 	_, err := os.Stat(cacheTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat cacheFile after initing cache. Err: %v\n", err)
@@ -33,13 +38,17 @@ func TestWrite(t *testing.T) {
 	}
 
 	cleanupCache(cacheTestfile)
+	cleanupCache(metadataTestfile)
 }
 
 func TestLoad(t *testing.T) {
 	// Ensure the file isn't already there.
 	cacheTestfile := "TestLoadCacheFile.test"
+	metadataTestfile := "metadataCache.test"
 	cleanupCache(cacheTestfile)
-	c := NewCache(cacheTestfile, "localhost:5001")
+	cleanupCache(metadataTestfile)
+	meta := metadata.NewCache(metadataTestfile)
+	c := NewCache(cacheTestfile, meta, "localhost:5001")
 	_, err := os.Stat(cacheTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat cacheFile after initing cache. Err: %v\n", err)
@@ -52,13 +61,17 @@ func TestLoad(t *testing.T) {
 	}
 
 	cleanupCache(cacheTestfile)
+	cleanupCache(metadataTestfile)
 }
 
 func TestFetchUrl(t *testing.T) {
 	// Ensure the file isn't already there.
 	cacheTestfile := "TestLoadCacheFile.test"
+	metadataTestfile := "metadataCache.test"
 	cleanupCache(cacheTestfile)
-	c := NewCache(cacheTestfile, "localhost:5001")
+	cleanupCache(metadataTestfile)
+	meta := metadata.NewCache(metadataTestfile)
+	c := NewCache(cacheTestfile, meta, "localhost:5001")
 	_, err := os.Stat(cacheTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat cacheFile after initing cache. Err: %v\n", err)
@@ -69,7 +82,7 @@ func TestFetchUrl(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to get song from ipfs. Err: %v\n", err)
 	}
-	expectedPath := "/ipfs/Qmcyp23gdiP6oGCp9jJqydkYboCQoCFj5yuiM3nnqzDbqn"
+	expectedPath := "/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf"
 	if ipfsPath != expectedPath {
 		t.Errorf("IPFS path doesn't match testing default. Expected: %v\nActual: %v\n", expectedPath, ipfsPath)
 	}
@@ -88,4 +101,5 @@ func TestFetchUrl(t *testing.T) {
 	// File should be written now. Manual verification is needed to confirm
 	// the data is correct
 	cleanupCache(cacheTestfile)
+	cleanupCache(metadataTestfile)
 }

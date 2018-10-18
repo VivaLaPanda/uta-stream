@@ -22,7 +22,7 @@ type Mixer struct {
 	currentSong      *chan []byte
 	queue            *queue.Queue
 	cache            *cache.Cache
-	currentSongPath  string
+	CurrentSongPath  string
 	playLock         *sync.Mutex
 }
 
@@ -42,7 +42,7 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 		currentSong:      &currentSong,
 		queue:            queue,
 		cache:            cache,
-		currentSongPath:  "",
+		CurrentSongPath:  "",
 		playLock:         &sync.Mutex{}}
 	close(currentSong)
 	// Spin up the job to cast from the current song to our output
@@ -61,15 +61,15 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 			}
 
 			// We couldn't play from current, assume that the song ended
-			if mixer.currentSongPath != "" {
+			if mixer.CurrentSongPath != "" {
 				// If we were just playing something unknown, the autoq don't care
-				mixer.queue.NotifyDone(mixer.currentSongPath)
+				mixer.queue.NotifyDone(mixer.CurrentSongPath)
 			}
 
 			tempSong, tempPath, isEmpty := mixer.fetchNextSong()
 			if !isEmpty && (tempSong != nil) {
 				mixer.currentSong = tempSong
-				mixer.currentSongPath = tempPath
+				mixer.CurrentSongPath = tempPath
 				broadcastPacket := <-*mixer.currentSong
 				mixer.Output <- broadcastPacket
 			}

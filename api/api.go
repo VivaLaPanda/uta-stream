@@ -7,12 +7,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/VivaLaPanda/uta-stream/mixer"
 	"github.com/VivaLaPanda/uta-stream/queue"
 	"github.com/VivaLaPanda/uta-stream/resource/cache"
+	"github.com/VivaLaPanda/uta-stream/resource/metadata"
 )
 
 type key int
@@ -25,18 +27,19 @@ var (
 	healthy int32
 )
 
-func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, port int) {
+func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, info *metadata.Cache, port int) {
 	logger := log.New(os.Stdout, "http: ", log.LstdFlags)
 	logger.Println("Server is starting...")
 
 	// Router setup
 	router := http.NewServeMux()
 	router.Handle("/", index())
-	router.Handle("/enqueue", enqueue(q, c))
-	router.Handle("/playnext", playnext(q, c))
+	router.Handle("/enqueue", enqueue(q, c, info))
+	router.Handle("/playnext", playnext(q, c, info))
 	router.Handle("/skip", skip(m))
 	router.Handle("/play", play(m))
 	router.Handle("/pause", pause(m))
+	router.Handle("/playing", playing(m, q, info))
 
 	nextRequestID := func() string {
 		return fmt.Sprintf("%d", time.Now().UnixNano())
@@ -95,7 +98,7 @@ func index() http.Handler {
 	})
 }
 
-func enqueue(q *queue.Queue, c *cache.Cache) http.Handler {
+func enqueue(q *queue.Queue, c *cache.Cache, info *metadata.Cache) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		resourceToQueue := r.URL.Query().Get("song")
@@ -122,14 +125,16 @@ func enqueue(q *queue.Queue, c *cache.Cache) http.Handler {
 			q.AddToQueue(resourceToQueue)
 		}
 
+		title := info.Lookup(resourceToQueue)
+
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "enqueue successfully enqueued audio at: %v", resourceToQueue)
+		fmt.Fprintf(w, "enqueue successfully enqueued \"%v\" at: %v", title, resourceToQueue)
 	})
 }
 
 // TODO: This should be considered non-functional until we work out
 // how to do this properly with the mixer
-func playnext(q *queue.Queue, c *cache.Cache) http.Handler {
+func playnext(q *queue.Queue, c *cache.Cache, info *metadata.Cache) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		resourceToQueue := r.URL.Query().Get("song")
@@ -181,6 +186,31 @@ func pause(e *mixer.Mixer) http.Handler {
 		e.Pause()
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "song skipped successfully")
+	})
+}
+
+func playing(m *mixer.Mixer, q *queue.Queue, info *metadata.Cache) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+
+		// Note that these string cats are less expensive than they look
+		// Go's compiler optimzes them pretty well
+		// source: https://syslog.ravelin.com/bytes-buffer-i-thought-you-were-my-friend-4148fd001229
+
+		// Format current
+		currentString := "Now Playing: " + info.Lookup(m.CurrentSongPath) + ""
+
+		// Format playing
+		queued := q.GetQueue()
+		for idx, song := range queued {
+			queued[idx] = fmt.Sprintf("%d: %s", idx+1, info.Lookup(song))
+		}
+		queuedString := strings.Join(queued, "\n")
+
+		output := currentString + "\n\nQueued:\n" + queuedString
+
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, output)
 	})
 }
 

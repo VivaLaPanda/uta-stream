@@ -1,11 +1,14 @@
 package queue
 
 import (
+	"sync"
+
 	"github.com/VivaLaPanda/uta-stream/queue/auto"
 )
 
 type Queue struct {
 	fifo         []string
+	lock         *sync.Mutex
 	autoq        *auto.AQEngine
 	AutoqEnabled bool
 }
@@ -13,6 +16,7 @@ type Queue struct {
 // Make a new q structure. allowChainbreak will make the autoq more random
 func NewQueue(aqEngine *auto.AQEngine, enableAutoq bool) *Queue {
 	return &Queue{
+		lock:         &sync.Mutex{},
 		autoq:        aqEngine,
 		AutoqEnabled: enableAutoq}
 }
@@ -35,10 +39,12 @@ func (q *Queue) Pop() (ipfsPath string, emptyq bool) {
 		}
 	}
 
+	q.lock.Lock()
 	// Top (just get next element, don't remove it)
 	song := q.fifo[0]
 	// Discard top element
 	q.fifo = q.fifo[1:]
+	q.lock.Unlock()
 
 	return song, false
 }
@@ -55,7 +61,9 @@ func (q *Queue) IsEmpty() bool {
 
 // Add the provided song to the queue at the back
 func (q *Queue) AddToQueue(ipfsPath string) {
+	q.lock.Lock()
 	q.fifo = append(q.fifo, ipfsPath)
+	q.lock.Unlock()
 }
 
 // Add the provided song to the queue at the front
@@ -64,16 +72,28 @@ func (q *Queue) AddToQueue(ipfsPath string) {
 // and requeue next song, dump it from the encoder, and then have the encoder pop the q
 // https://github.com/VivaLaPanda/uta-stream/issues/4
 func (q *Queue) PlayNext(ipfsPath string) {
+	q.lock.Lock()
 	q.fifo = append([]string{ipfsPath}, q.fifo...)
+	q.lock.Unlock()
 }
 
 // Remove all items from the queue. Will not dump the encoder (current and next song)
 func (q *Queue) Dump() {
+	q.lock.Lock()
 	q.fifo = make([]string, 0)
+	q.lock.Unlock()
 }
 
 func (q *Queue) Length() int {
 	return len(q.fifo)
+}
+
+func (q *Queue) GetQueue() []string {
+	qCopy := make([]string, len(q.fifo))
+	q.lock.Lock()
+	copy(qCopy, q.fifo)
+	q.lock.Unlock()
+	return qCopy
 }
 
 // Used as a gateway to let the autoq know a song was played. For training the

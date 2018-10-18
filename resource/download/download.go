@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/VivaLaPanda/uta-stream/resource/metadata"
 	shell "github.com/ipfs/go-ipfs-api"
 	"github.com/rylio/ytdl"
 )
@@ -22,7 +23,7 @@ var tempDLFolder = "TEMP-DL"
 // without waiting for the DL to finish. If you pass a writer the data will be
 // pushed into that reader at the same time it's written to disk. I recommend
 // a buffered reader, as I'm using TeeReader which works best with buffers
-func Download(rawurl string, ipfs *shell.Shell, streamData io.Writer) (ipfsPath string, err error) {
+func Download(rawurl string, ipfs *shell.Shell, metadata *metadata.Cache, streamData io.Writer) (ipfsPath string, err error) {
 	// Ensure the temporary directory for storing downloads exists
 	if _, err = os.Stat(tempDLFolder); os.IsNotExist(err) {
 		os.Mkdir(tempDLFolder, os.ModePerm)
@@ -39,14 +40,14 @@ func Download(rawurl string, ipfs *shell.Shell, streamData io.Writer) (ipfsPath 
 	// Route to different handlers based on hostname
 	switch urlToDL.Hostname() {
 	case "youtube.com", "youtu.be", "www.youtube.com":
-		return downloadYoutube(*urlToDL, ipfs, streamData)
+		return downloadYoutube(*urlToDL, ipfs, metadata, streamData)
 	default:
 		return "", fmt.Errorf("URL hostname (%v) doesn't match a known provider.\n"+
 			"Should be one of: %v\n", urlToDL.Hostname(), knownProviders)
 	}
 }
 
-func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, streamData io.Writer) (ipfsPath string, err error) {
+func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, metadata *metadata.Cache, streamData io.Writer) (ipfsPath string, err error) {
 	// Get the info for the video
 	var vidInfo *ytdl.VideoInfo
 	switch urlToDL.Hostname() {
@@ -92,6 +93,8 @@ func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, streamData io.Writer) (
 		dlDone.Done()
 	}()
 
+	fileTitle := vidInfo.Title
+
 	// Write to file and potentially the provided streamData
 	fileLocation := filepath.Join(tempDLFolder, vidInfo.ID+".mp3")
 	_ = os.MkdirAll(filepath.Dir(fileLocation), os.ModePerm)
@@ -122,6 +125,8 @@ func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, streamData io.Writer) (
 	if err != nil {
 		return "", err
 	}
+
+	metadata.Store(ipfsPath, fileTitle)
 
 	// Remove the mp3 now that we've added
 	if err = os.Remove(fileLocation); err != nil {

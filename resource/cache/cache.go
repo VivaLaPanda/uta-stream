@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/VivaLaPanda/uta-stream/resource/download"
+	"github.com/VivaLaPanda/uta-stream/resource/metadata"
 	shell "github.com/ipfs/go-ipfs-api"
 )
 
@@ -19,6 +20,7 @@ type Cache struct {
 	ipfs          *shell.Shell
 	cacheFilename string
 	Hotstream     io.Reader
+	metadata      *metadata.Cache
 }
 
 // How many minutes to wait between saves of the cache state
@@ -29,9 +31,14 @@ var autosaveTimer time.Duration = 30
 // Function which will provide a new cache struct
 // An cache must be provided a file that it can read/write it's data to
 // so that the cache is preserved between launches
-func NewCache(cacheFile string, ipfsUrl string) *Cache {
+func NewCache(cacheFile string, metadata *metadata.Cache, ipfsUrl string) *Cache {
 	urlMap := make(map[string]string)
-	c := &Cache{&urlMap, &sync.RWMutex{}, shell.NewShell(ipfsUrl), cacheFile, nil}
+	c := &Cache{&urlMap,
+		&sync.RWMutex{},
+		shell.NewShell(ipfsUrl),
+		cacheFile,
+		nil,
+		metadata}
 
 	// Confirm we can interact with our persitent storage
 	_, err := os.Stat(cacheFile)
@@ -114,7 +121,7 @@ func (c *Cache) UrlCacheLookup(url string, urgent bool) (ipfsPath string, err er
 		}
 
 		// Go fetch the provided URL
-		ipfsPath, err = download.Download(url, c.ipfs, hotstreamWriter)
+		ipfsPath, err = download.Download(url, c.ipfs, c.metadata, hotstreamWriter)
 		if err != nil {
 			return "", fmt.Errorf(("failed to DL requested resource: %v\nerr:%v"), url, err)
 		}
