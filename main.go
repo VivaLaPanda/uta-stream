@@ -8,11 +8,13 @@ import (
 	"github.com/VivaLaPanda/uta-stream/queue"
 	"github.com/VivaLaPanda/uta-stream/queue/auto"
 	"github.com/VivaLaPanda/uta-stream/resource/cache"
+	"github.com/VivaLaPanda/uta-stream/resource/metadata"
 	"github.com/VivaLaPanda/uta-stream/stream"
 )
 
 // Various runtime flags
 var autoqFilename = flag.String("autoqFilename", "autoq.db", "Where to store autoq database")
+var metadataFilename = flag.String("metadataFilename", "metadata.db", "Where to store metadata database")
 var cacheFilename = flag.String("cacheFilename", "cache.db", "Where to store cache database")
 var ipfsUrl = flag.String("ipfsUrl", "localhost:5001", "The url of the local IPFS instance")
 var enableAutoq = flag.Bool("enableAutoq", true, "Whether to use autoq feature")
@@ -25,13 +27,14 @@ var audioPort = flag.Int("audioPort", 9090, "Which port to serve the audio strea
 func main() {
 	flag.Parse()
 
+	info := metadata.NewCache(*metadataFilename)
 	a := auto.NewAQEngine(*autoqFilename, *allowChainbreak, *autoQPrefixLen)
 	q := queue.NewQueue(a, *enableAutoq)
-	c := cache.NewCache(*cacheFilename, *ipfsUrl)
+	c := cache.NewCache(*cacheFilename, info, *ipfsUrl)
 	e := mixer.NewMixer(q, c, *packetsPerSecond)
 
 	go func() {
 		stream.ServeAudioOverHttp(e.Output, *packetsPerSecond, *audioPort)
 	}()
-	api.ServeApi(e, c, q, *apiPort)
+	api.ServeApi(e, c, q, info, *apiPort)
 }

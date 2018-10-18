@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/VivaLaPanda/uta-stream/resource/metadata"
 	shell "github.com/ipfs/go-ipfs-api"
 )
 
@@ -40,7 +41,7 @@ func TestSplitAudio(t *testing.T) {
 func TestDownloadYoutube(t *testing.T) {
 	rawUrl := "https://youtu.be/nAwTw1aYy6M"
 	ipfsUrl := "localhost:5001"
-	expectedIpfsHash := "/ipfs/Qmcyp23gdiP6oGCp9jJqydkYboCQoCFj5yuiM3nnqzDbqn"
+	expectedIpfsHash := "/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf"
 
 	// Setup shell and testing url
 	sh := shell.NewShell(ipfsUrl)
@@ -54,8 +55,10 @@ func TestDownloadYoutube(t *testing.T) {
 	defer outputFile.Close()
 	bWriter := bufio.NewWriter(outputFile)
 
+	metadata := metadata.NewCache("metadata.db.test")
+
 	// Commence the download
-	ipfsPath, err := downloadYoutube(*urlToDL, sh, bWriter)
+	ipfsPath, err := downloadYoutube(*urlToDL, sh, metadata, bWriter)
 	if err != nil {
 		t.Errorf("TestDownloadYoutube failed due to an error: %v", err)
 	}
@@ -71,7 +74,9 @@ func TestDownload(t *testing.T) {
 	// Setup shell and testing url
 	sh := shell.NewShell(ipfsUrl)
 
-	ipfsPath, err := Download(rawUrl, sh, nil)
+	metadata := metadata.NewCache("metadata.db.test")
+
+	ipfsPath, err := Download(rawUrl, sh, metadata, nil)
 	if err != nil {
 		t.Errorf("TestDownloadYoutube failed due to an error: %v", err)
 	}
