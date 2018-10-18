@@ -17,6 +17,8 @@ import (
 	"github.com/VivaLaPanda/uta-stream/resource/metadata"
 )
 
+type QFunc func(ipfsPath string)
+
 type key int
 
 const (
@@ -34,8 +36,8 @@ func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, info *metadata.Cac
 	// Router setup
 	router := http.NewServeMux()
 	router.Handle("/", index())
-	router.Handle("/enqueue", enqueue(q, c, info))
-	router.Handle("/playnext", playnext(q, c, info))
+	router.Handle("/enqueue", queuer(q, c, info, q.AddToQueue))
+	router.Handle("/playnext", queuer(q, c, info, q.PlayNext))
 	router.Handle("/skip", skip(m))
 	router.Handle("/play", play(m))
 	router.Handle("/pause", pause(m))
@@ -98,14 +100,14 @@ func index() http.Handler {
 	})
 }
 
-func enqueue(q *queue.Queue, c *cache.Cache, info *metadata.Cache) http.Handler {
+func queuer(q *queue.Queue, c *cache.Cache, info *metadata.Cache, qFunc QFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		resourceToQueue := r.URL.Query().Get("song")
 		if resourceToQueue == "" {
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintln(w, "/enqueue expects a song resource identifier in the request.\n"+
-				"eg api.example/enqueue?song1=https%3A%2F%2Fyoutu.be%2FnAwTw1aYy6M") // https://youtu.be/nAwTw1aYy6M
+			fmt.Fprintln(w, "/enqueue and /playnext expect a song resource identifier in the request.\n"+
+				"eg api.example/enqueue?song=https://youtu.be/N8nGig78lNs") // https://youtu.be/nAwTw1aYy6M
 		}
 
 		// If we're looking at an ipfs path just leave as is
@@ -122,7 +124,7 @@ func enqueue(q *queue.Queue, c *cache.Cache, info *metadata.Cache) http.Handler 
 					if err != nil {
 						return
 					}
-					q.AddToQueue(resourceToQueue)
+					qFunc(resourceToQueue)
 				}()
 
 				w.WriteHeader(http.StatusOK)
@@ -134,39 +136,13 @@ func enqueue(q *queue.Queue, c *cache.Cache, info *metadata.Cache) http.Handler 
 		}
 
 		if !urgent {
-			q.AddToQueue(resourceToQueue)
+			qFunc(resourceToQueue)
 		}
 
 		title := info.Lookup(resourceToQueue)
 
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "enqueue successfully enqueued \"%v\" at: %v", title, resourceToQueue)
-	})
-}
-
-// TODO: This should be considered non-functional until we work out
-// how to do this properly with the mixer
-func playnext(q *queue.Queue, c *cache.Cache, info *metadata.Cache) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		resourceToQueue := r.URL.Query().Get("song")
-		if resourceToQueue == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintln(w, "/playnext expects a song resource identifier in the request.\n"+
-				"eg api.example/enqueue?song1=https%3A%2F%2Fyoutu.be%2FnAwTw1aYy6M") // https://youtu.be/nAwTw1aYy6M
-		}
-
-		// TODO: This assumes we're only dealing with urls, doesn't check ipfs
-		ipfsPath, err := c.UrlCacheLookup(resourceToQueue, false)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "playnext encountered an unexpected error: %v", err)
-			return
-		}
-		q.PlayNext(ipfsPath)
-
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "playnext successfully enqueued audio at: %v", ipfsPath)
+		fmt.Fprintf(w, "successfully added to queue \"%v\" at: %v", title, resourceToQueue)
 	})
 }
 
