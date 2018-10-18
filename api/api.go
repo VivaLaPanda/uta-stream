@@ -112,12 +112,24 @@ func enqueue(q *queue.Queue, c *cache.Cache, info *metadata.Cache) http.Handler 
 		// Otherwise go and fetch it
 		urgent := q.IsEmpty()
 		if resourceToQueue[:6] != "/ipfs/" {
-			var err error
-			resourceToQueue, err = c.UrlCacheLookup(resourceToQueue, urgent)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "enqueue encountered an unexpected error: %v", err)
+			cachedResource, cached := c.QuickLookup(resourceToQueue)
+			if !cached {
+				// We have to go download the track and convert it. This could take a
+				// while so we'll just respond and let them know we're working on it
+				go func() {
+					var err error
+					resourceToQueue, err = c.UrlCacheLookup(resourceToQueue, urgent)
+					if err != nil {
+						return
+					}
+					q.AddToQueue(resourceToQueue)
+				}()
+
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprintf(w, "started download, track will be added when done")
 				return
+			} else {
+				resourceToQueue = cachedResource
 			}
 		}
 
