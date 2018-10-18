@@ -63,6 +63,7 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 			// We couldn't play from current, assume that the song ended
 			if mixer.CurrentSongPath != "" {
 				// If we were just playing something unknown, the autoq don't care
+				// TODO: This should detect skips and not notify if the song was skipped
 				mixer.queue.NotifyDone(mixer.CurrentSongPath)
 			}
 

@@ -104,6 +104,15 @@ func (c *Cache) Load(filename string) error {
 	return nil
 }
 
+func (c *Cache) QuickLookup(url string) (ipfsPath string, exists bool) {
+	// Check the cache for the provided URL
+	c.urlMapLock.RLock()
+	ipfsPath, exists = (*c.urlMap)[url]
+	c.urlMapLock.RUnlock()
+
+	return ipfsPath, exists
+}
+
 func (c *Cache) UrlCacheLookup(url string, urgent bool) (ipfsPath string, err error) {
 	// Check the cache for the provided URL
 	c.urlMapLock.RLock()
