@@ -161,6 +161,9 @@ func (c *chain) generate() string {
 	var randChoice string
 	for _, v := range *c.chainData {
 		randChoice = v[rand.Intn(len(v))]
+		if randChoice != c.prefix[len(c.prefix)-1] {
+			break
+		}
 	}
 
 	// If there are no known songs, just pick something at random
