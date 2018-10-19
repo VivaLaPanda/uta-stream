@@ -16,6 +16,7 @@ import (
 var autoqFilename = flag.String("autoqFilename", "autoq.db", "Where to store autoq database")
 var metadataFilename = flag.String("metadataFilename", "metadata.db", "Where to store metadata database")
 var cacheFilename = flag.String("cacheFilename", "cache.db", "Where to store cache database")
+var authCfgFilename = flag.String("authCfgFilename", "", "Where to find auth config json")
 var ipfsUrl = flag.String("ipfsUrl", "localhost:5001", "The url of the local IPFS instance")
 var enableAutoq = flag.Bool("enableAutoq", true, "Whether to use autoq feature")
 var chainbreakProb = flag.Float64("chainbreakProb", .05, "Allows more random autoq")
@@ -36,5 +37,5 @@ func main() {
 	go func() {
 		stream.ServeAudioOverHttp(e.Output, *packetsPerSecond, *audioPort)
 	}()
-	api.ServeApi(e, c, q, info, *apiPort)
+	api.ServeApi(e, c, q, info, *apiPort, *authCfgFilename)
 }
