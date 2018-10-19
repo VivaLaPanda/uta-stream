@@ -1,6 +1,7 @@
 {
     "tokenRoles": {
         "test-a": ["/"],
-        "test-b": ["/", "/playing"]
+        "test-b": ["/", "/playing"],
+        "test-su": ["*"]
     }
 }
