@@ -130,41 +130,27 @@ func queuer(q *queue.Queue, c *cache.Cache, info *metadata.Cache, qFunc QFunc) h
 				"eg api.example/enqueue?song=https://youtu.be/N8nGig78lNs") // https://youtu.be/nAwTw1aYy6M
 			return
 		}
+		if len(resourceID) < 6 {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintln(w, "url should be at least 6 characters.\n")
+			return
+		}
 
 		// If we're looking at an ipfs path just leave as is
 		// Otherwise go and fetch it
-		urgent := q.IsEmpty()
 		if resourceToQueue[:6] != "/ipfs/" {
-			cachedResource, cached := c.QuickLookup(resourceToQueue)
-			if !cached {
-				// We have to go download the track and convert it. This could take a
-				// while so we'll just respond and let them know we're working on it
-				go func() {
-					var err error
-					resourceToQueue, err = c.UrlCacheLookup(resourceToQueue, urgent)
-					if err != nil {
-						log.Printf("Failed to enqueue song, err: %v", err)
-						return
-					}
-					qFunc(resourceToQueue)
-				}()
-
-				w.WriteHeader(http.StatusOK)
-				fmt.Fprintf(w, "started download, track will be added when done")
+			resourceToQueue, err = c.UrlCacheLookup(resourceToQueue)
+			if err != nil {
+				log.Printf("Failed to enqueue song, err: %v", err)
 				return
-			} else {
-				resourceToQueue = cachedResource
 			}
-		}
-
-		if !urgent {
 			qFunc(resourceToQueue)
 		}
 
 		title := info.Lookup(resourceToQueue)
 
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "successfully added to queue \"%v\" at: %v", title, resourceToQueue)
+		fmt.Fprintf(w, "successfully added \"%v\" to queue", title)
 	})
 }
 

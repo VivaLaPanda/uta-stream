@@ -8,7 +8,7 @@ import (
 
 	"github.com/VivaLaPanda/uta-stream/encoder"
 	"github.com/VivaLaPanda/uta-stream/queue"
-	"github.com/VivaLaPanda/uta-stream/resource/cache"
+	"github.com/btcsuite/goleveldb/leveldb/cache"
 )
 
 // Mixer is in charge of interacting with the queue and resource cache
@@ -21,7 +21,6 @@ type Mixer struct {
 	packetsPerSecond int
 	currentSong      *chan []byte
 	queue            *queue.Queue
-	cache            *cache.Cache
 	CurrentSongPath  string
 	playLock         *sync.Mutex
 	skipped          bool
@@ -113,26 +112,11 @@ func (m *Mixer) Pause() {
 
 // Will go to queue and get the next track
 func (m *Mixer) fetchNextSong() (nextSongChan *chan []byte, nextSongPath string, isEmpty bool) {
-	nextSongPath, isEmpty = m.queue.Pop()
+	nextSongPath, nextSongReader, isEmpty = m.queue.Pop()
 	var nextSongReader io.Reader
 	var err error
 	if isEmpty {
-		if m.cache.Hotstream != nil {
-			// The queue is empty but we have a hotstream, which means something
-			// is being converted urgently for us. Just start playing, ipfs/songdata
-			// will show up as unknown
-			nextSongReader = m.cache.Hotstream
-		} else {
-			// Empty and now hotstream, there really is nothing for us to do
-			return nil, "", true
-		}
-	} else {
-		// The queue isn't empty so we'll go get the provided song
-		nextSongReader, err = m.cache.FetchIpfs(nextSongPath)
-		if err != nil {
-			log.Printf("Failed to fetch song (%v). Err: %v\n", nextSongPath, err)
-			return nil, "", true
-		}
+		return nil, "", true
 	}
 
 	// Start encoding for broadcast

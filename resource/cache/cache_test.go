@@ -81,16 +81,19 @@ func TestFetchUrl(t *testing.T) {
 	ipfsPath, songReader, err := c.FetchUrl("https://youtu.be/nAwTw1aYy6M")
 	if err != nil {
 		t.Errorf("Failed to get song from ipfs. Err: %v\n", err)
+		return
 	}
 	expectedPath := "/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf"
 	if ipfsPath != expectedPath {
 		t.Errorf("IPFS path doesn't match testing default. Expected: %v\nActual: %v\n", expectedPath, ipfsPath)
+		return
 	}
 
 	// Open file for writing
 	songFile, err := os.OpenFile("test_song.mp3", os.O_RDWR|os.O_CREATE, 0660)
 	if err != nil {
 		t.Errorf("Failed to open song file for writing. Err: %v\n", err)
+		return
 	}
 
 	// Copy data from reader to writer and then close both
