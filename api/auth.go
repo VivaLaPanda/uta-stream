@@ -69,13 +69,19 @@ func (amw *authMiddleware) Middleware(next http.Handler) http.Handler {
 }
 
 func (amw *authMiddleware) validateToken(token string, route string) (valid bool) {
+	if len(token) < 7 {
+		return false
+	}
 	if token[:7] != "Bearer " {
 		return false
 	}
 	token = token[7:]
 	if roles, found := amw.tokenRoles[token]; found {
 		for _, role := range roles {
-			fmt.Println("route:", route, "pathandrole", amw.basePath+role)
+			if role == "*" {
+				return true
+			}
+
 			if route == amw.basePath+role {
 				return true
 			}

@@ -16,3 +16,6 @@ debug
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+
+# Auth tokens, in case you forget to remove them
+auth.json

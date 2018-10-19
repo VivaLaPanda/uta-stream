@@ -52,4 +52,9 @@ func TestValidateToken(t *testing.T) {
 	if !valid {
 		t.Errorf("Route should match token's \n")
 	}
+
+	valid = amw.validateToken("Bearer su", "enqueue")
+	if !valid {
+		t.Errorf("Route should match token's \n")
+	}
 }
