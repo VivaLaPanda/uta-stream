@@ -36,6 +36,7 @@ func EncodeMP3(mp3Data io.Reader, packetsPerSecond int) (*chan []byte, error) {
 
 		// Read file for audio stream
 		var err error
+		var n int
 		for err == nil {
 			// Here we convert the kbps into bytes/seconds per packet so that the stream
 			// rate is correct
@@ -44,7 +45,8 @@ func EncodeMP3(mp3Data io.Reader, packetsPerSecond int) (*chan []byte, error) {
 			default:
 			}
 			dataPacket := make([]byte, bitrate/(8*packetsPerSecond))
-			_, err = sourceReader.Read(dataPacket)
+			n, err = sourceReader.Read(dataPacket)
+			dataPacket = dataPacket[:n] // Shrink the packet if necessary
 			tmpSong <- dataPacket
 		}
 		close(tmpSong)
