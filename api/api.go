@@ -15,6 +15,7 @@ import (
 	"github.com/VivaLaPanda/uta-stream/queue"
 	"github.com/VivaLaPanda/uta-stream/resource/cache"
 	"github.com/VivaLaPanda/uta-stream/resource/metadata"
+	"github.com/gorilla/mux"
 )
 
 type QFunc func(ipfsPath string)
@@ -33,15 +34,25 @@ func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, info *metadata.Cac
 	logger := log.New(os.Stdout, "http: ", log.LstdFlags)
 	logger.Println("Server is starting...")
 
+	basePath := "/api"
+
 	// Router setup
-	router := http.NewServeMux()
-	router.Handle("/", index())
-	router.Handle("/enqueue", queuer(q, c, info, q.AddToQueue))
-	router.Handle("/playnext", queuer(q, c, info, q.PlayNext))
-	router.Handle("/skip", skip(m))
-	router.Handle("/play", play(m))
-	router.Handle("/pause", pause(m))
-	router.Handle("/playing", playing(m, q, info))
+	router := mux.NewRouter()
+	router.Handle(basePath+"/", index()).
+		Methods("GET")
+	router.Handle(basePath+"/enqueue", queuer(q, c, info, q.AddToQueue)).
+		Methods("POST")
+	router.Handle(basePath+"/playnext", queuer(q, c, info, q.PlayNext)).
+		Methods("POST")
+	router.Handle(basePath+"/skip", skip(m)).
+		Methods("POST")
+	router.Handle(basePath+"/play", play(m)).
+		Methods("PUT")
+	router.Handle(basePath+"/pause", pause(m)).
+		Methods("PUT")
+	router.Handle(basePath+"/playing", playing(m, q, info)).
+		Methods("GET")
+	router.NotFoundHandler = http.HandlerFunc(notFound)
 
 	nextRequestID := func() string {
 		return fmt.Sprintf("%d", time.Now().UnixNano())
@@ -87,6 +98,12 @@ func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, info *metadata.Cac
 	logger.Println("Server stopped")
 }
 
+func notFound(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotFound)
+	fmt.Fprintln(w, "Endpoint not found. Doublecheck your query or take a look at the"+
+		"docs: https://github.com/VivaLaPanda/uta-stream")
+}
+
 func index() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
@@ -108,6 +125,7 @@ func queuer(q *queue.Queue, c *cache.Cache, info *metadata.Cache, qFunc QFunc) h
 			w.WriteHeader(http.StatusBadRequest)
 			fmt.Fprintln(w, "/enqueue and /playnext expect a song resource identifier in the request.\n"+
 				"eg api.example/enqueue?song=https://youtu.be/N8nGig78lNs") // https://youtu.be/nAwTw1aYy6M
+			return
 		}
 
 		// If we're looking at an ipfs path just leave as is

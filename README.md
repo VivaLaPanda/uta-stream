@@ -25,7 +25,7 @@ this is a small project, just use common sense.
 
 ## Progress:
 
-Done:
+Implemented:
 * Core streaming library. One mp3 data stream to multiple clients in sync
 * MP3 data processing, can read files and get necessary header data
 * Queuing system, including auto mode
@@ -34,11 +34,11 @@ Done:
     - youtube
     - ipfs
 * API
+* Song info cache (ipfsHash -> Title/etc.)
 
 In Progress:
 * Downloaders
     - soundcloud
-* Song info cache (ipfsHash -> Title/etc.)
 * Optional tiny frontend for interacting with API
 * Playlist support
 
