@@ -32,8 +32,9 @@ Implemented:
 * Resource cache
 * Downloaders
     - youtube
-    - ipfs
+    - ipfsxx
 * API
+* Permissions (Key-based)
 * Song info cache (ipfsHash -> Title/etc.)
 
 In Progress:
@@ -44,7 +45,6 @@ In Progress:
 
 Ready to start:
 * DJ Mode (only one user can queue)
-* Permissions (Key-based)
 * Share download/info caches (support network urls instead of local FS, or both at once and a syncing mechanism)
     - Possibly means moving caches into SQL
 
