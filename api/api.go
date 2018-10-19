@@ -30,27 +30,34 @@ var (
 	healthy int32
 )
 
-func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, info *metadata.Cache, port int) {
+func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, info *metadata.Cache, port int, authCfgFilename string) {
 	logger := log.New(os.Stdout, "http: ", log.LstdFlags)
 	logger.Println("Server is starting...")
 
 	basePath := "/api"
 
+	amw, err := NewAuthMiddleware(authCfgFilename, basePath)
+	if err != nil {
+		logger.Fatalf("Couldn't find/parse provided auth config file. Err: %v\n", err)
+	}
+
 	// Router setup
-	router := mux.NewRouter()
-	router.Handle(basePath+"/", index()).
+	baseRouter := mux.NewRouter()
+	router := baseRouter.PathPrefix(basePath).Subrouter()
+	router.Use(amw.Middleware)
+	router.Handle("/", index()).
 		Methods("GET")
-	router.Handle(basePath+"/enqueue", queuer(q, c, info, q.AddToQueue)).
+	router.Handle("/enqueue", queuer(q, c, info, q.AddToQueue)).
 		Methods("POST")
-	router.Handle(basePath+"/playnext", queuer(q, c, info, q.PlayNext)).
+	router.Handle("/playnext", queuer(q, c, info, q.PlayNext)).
 		Methods("POST")
-	router.Handle(basePath+"/skip", skip(m)).
+	router.Handle("/skip", skip(m)).
 		Methods("POST")
-	router.Handle(basePath+"/play", play(m)).
+	router.Handle("/play", play(m)).
 		Methods("PUT")
-	router.Handle(basePath+"/pause", pause(m)).
+	router.Handle("/pause", pause(m)).
 		Methods("PUT")
-	router.Handle(basePath+"/playing", playing(m, q, info)).
+	router.Handle("/playing", playing(m, q, info)).
 		Methods("GET")
 	router.NotFoundHandler = http.HandlerFunc(notFound)
 
@@ -88,7 +95,7 @@ func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, info *metadata.Cac
 		close(done)
 	}()
 
-	logger.Println("Server is ready to handle requests at", listenAddr)
+	logger.Println("Server is ready to handle requests at", listenAddr, "/api")
 	atomic.StoreInt32(&healthy, 1)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Fatalf("Could not listen on %s: %v\n", listenAddr, err)
@@ -106,10 +113,6 @@ func notFound(w http.ResponseWriter, r *http.Request) {
 
 func index() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-			return
-		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.WriteHeader(http.StatusOK)

@@ -1,0 +1,6 @@
+{
+    "tokenRoles": {
+        "foo": ["enqueue"],
+        "bar": ["playnext", "skip"]
+    }
+}
