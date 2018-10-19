@@ -18,7 +18,7 @@ var metadataFilename = flag.String("metadataFilename", "metadata.db", "Where to 
 var cacheFilename = flag.String("cacheFilename", "cache.db", "Where to store cache database")
 var ipfsUrl = flag.String("ipfsUrl", "localhost:5001", "The url of the local IPFS instance")
 var enableAutoq = flag.Bool("enableAutoq", true, "Whether to use autoq feature")
-var allowChainbreak = flag.Bool("allowChainbreak", true, "Allows more random autoq")
+var chainbreakProb = flag.Float64("chainbreakProb", .05, "Allows more random autoq")
 var packetsPerSecond = flag.Int("packetsPerSecond", 2, "Affects stream smoothness/synchro")
 var autoQPrefixLen = flag.Int("autoQPrefixLen", 1, "Smaller = more random") // Large values will be random if the history is short
 var apiPort = flag.Int("apiPort", 8085, "Which port to serve the API on")
@@ -28,7 +28,7 @@ func main() {
 	flag.Parse()
 
 	info := metadata.NewCache(*metadataFilename)
-	a := auto.NewAQEngine(*autoqFilename, *allowChainbreak, *autoQPrefixLen)
+	a := auto.NewAQEngine(*autoqFilename, *chainbreakProb, *autoQPrefixLen)
 	q := queue.NewQueue(a, *enableAutoq)
 	c := cache.NewCache(*cacheFilename, info, *ipfsUrl)
 	e := mixer.NewMixer(q, c, *packetsPerSecond)

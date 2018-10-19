@@ -22,8 +22,8 @@ var autosaveTimer time.Duration = 5
 // Function which will provide a new autoq struct
 // An autoq must be provided a file that it can read/write it's data to
 // so that the chain is preserved between launches
-func NewAQEngine(qfile string, allowChainbreak bool, prefixLength int) *AQEngine {
-	q := &AQEngine{newChain(prefixLength, allowChainbreak), make(chan string)}
+func NewAQEngine(qfile string, chainbreakProb float64, prefixLength int) *AQEngine {
+	q := &AQEngine{newChain(prefixLength, chainbreakProb), make(chan string)}
 
 	// startBuildListener will watch a channel for new songs and add their data into
 	// the chain
@@ -122,17 +122,17 @@ func (p prefix) shift(word string) {
 // A prefix is a string of prefixLen songs joined with spaces.
 // A suffix is a single song. A prefix can have multiple suffixes.
 type chain struct {
-	chainData       *map[string][]string
-	prefix          prefix
-	chainLock       *sync.RWMutex
-	prefixLen       int
-	allowChainbreak bool
+	chainData      *map[string][]string
+	prefix         prefix
+	chainLock      *sync.RWMutex
+	prefixLen      int
+	chainbreakProb float64
 }
 
 // newChain returns a new chain with prefixes of prefixLen songs
-func newChain(prefixLen int, allowChainbreak bool) *chain {
+func newChain(prefixLen int, chainbreakProb float64) *chain {
 	chainData := make(map[string][]string)
-	return &chain{&chainData, make(prefix, prefixLen), &sync.RWMutex{}, prefixLen, allowChainbreak}
+	return &chain{&chainData, make(prefix, prefixLen), &sync.RWMutex{}, prefixLen, chainbreakProb}
 }
 
 // Build reads song uris from the provided channel
@@ -171,9 +171,12 @@ func (c *chain) generate() string {
 		return randChoice
 	}
 
-	// 1/50 chance that a random song is picked
-	if rand.Intn(50) == 1 {
-		return randChoice
+	// Some chance of picking a random song based on chainbreakProb
+	if c.chainbreakProb != 0 {
+		randInt := int(1 / c.chainbreakProb)
+		if rand.Intn(randInt) == 1 {
+			return randChoice
+		}
 	}
 
 	// Randomly select one of the choices

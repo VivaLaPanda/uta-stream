@@ -24,6 +24,7 @@ type Mixer struct {
 	cache            *cache.Cache
 	CurrentSongPath  string
 	playLock         *sync.Mutex
+	skipped          bool
 }
 
 // Bigger packet buffer means more resiliance but may cause
@@ -43,7 +44,8 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 		queue:            queue,
 		cache:            cache,
 		CurrentSongPath:  "",
-		playLock:         &sync.Mutex{}}
+		playLock:         &sync.Mutex{},
+		skipped:          false}
 	close(currentSong)
 	// Spin up the job to cast from the current song to our output
 	// and handle song transitions
@@ -61,10 +63,15 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 			}
 
 			// We couldn't play from current, assume that the song ended
-			if mixer.CurrentSongPath != "" {
+			// Also, if we just recieved a skip, then we don't want to use that
+			// song to train qutoq
+			if mixer.CurrentSongPath != "" && !mixer.skipped {
 				// If we were just playing something unknown, the autoq don't care
 				// TODO: This should detect skips and not notify if the song was skipped
 				mixer.queue.NotifyDone(mixer.CurrentSongPath)
+			}
+			if mixer.skipped {
+				mixer.skipped = false
 			}
 
 			tempSong, tempPath, isEmpty := mixer.fetchNextSong()
@@ -73,8 +80,9 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 				mixer.CurrentSongPath = tempPath
 				broadcastPacket := <-*mixer.currentSong
 				mixer.Output <- broadcastPacket
+			} else {
+				time.Sleep(2 * time.Second)
 			}
-			time.Sleep(1 * time.Second)
 		}
 	}()
 
@@ -83,6 +91,7 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 
 // Will swap the next song in place of the current one.
 func (m *Mixer) Skip() {
+	m.skipped = true
 	close(*m.currentSong)
 }
 
