@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"sync"
 	"time"
@@ -105,6 +106,11 @@ func (c *Cache) Load(filename string) error {
 }
 
 func (c *Cache) QuickLookup(url string) (ipfsPath string, exists bool) {
+	// normalize
+	url, err = urlNormalize(url)
+	if err != nil {
+		return "", fmt.Errorf("Provided resource doesn't appear to be a link: %v. \nErr: %v", url, err)
+	}
 	// Check the cache for the provided URL
 	c.urlMapLock.RLock()
 	ipfsPath, exists = (*c.urlMap)[url]
@@ -114,6 +120,12 @@ func (c *Cache) QuickLookup(url string) (ipfsPath string, exists bool) {
 }
 
 func (c *Cache) UrlCacheLookup(url string, urgent bool) (ipfsPath string, err error) {
+	// normalize
+	url, err = urlNormalize(url)
+	if err != nil {
+		return "", fmt.Errorf("Provided resource doesn't appear to be a link: %v. \nErr: %v", url, err)
+	}
+
 	// Check the cache for the provided URL
 	c.urlMapLock.RLock()
 	ipfsPath, exists := (*c.urlMap)[url]
@@ -161,4 +173,20 @@ func (c *Cache) FetchIpfs(ipfsPath string) (r io.ReadCloser, err error) {
 	}
 
 	return c.ipfs.Cat(ipfsPath)
+}
+
+// Try and normalize URLs to reduce duplication in resource cache
+func urlNormalize(rawUrl string) (normalizedUrl string, err error) {
+	parsedUrl, err := url.Parse(rawUrl)
+	if err != nil {
+		return "", err
+	}
+
+	// Handle Youtube URLs
+	if parsedUrl.Hostname() == "youtube.com" || parsedUrl.Hostname() == "www.youtube.com" {
+		vidID := parsedUrl.Query().Get("v")
+		normalizedUrl = fmt.Sprintf("https://youtu.be/%s", vidID)
+	}
+
+	return parsedUrl.String(), nil
 }
