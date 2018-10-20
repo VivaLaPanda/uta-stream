@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"bufio"
 	"encoding/gob"
 	"fmt"
 	"io"
@@ -20,8 +21,14 @@ type Cache struct {
 	urlMapLock    *sync.RWMutex
 	ipfs          *shell.Shell
 	cacheFilename string
-	Hotstream     io.Reader
 	metadata      *metadata.Cache
+	Placeholders  map[string]placeholder
+}
+
+type placeholder struct {
+	reader   io.Reader
+	ipfsPath string
+	done     chan bool
 }
 
 // How many minutes to wait between saves of the cache state
@@ -29,17 +36,23 @@ type Cache struct {
 // Autosave just helps in case of write failures
 var autosaveTimer time.Duration = 30
 
+// This number determines how many buffered readers to keep for unresolved
+// songs. The higher the number the less chance we are forced to block
+// when we want to play something, but higher numbers also increase memory usage
+var numBuffered = 2
+
 // Function which will provide a new cache struct
 // An cache must be provided a file that it can read/write it's data to
 // so that the cache is preserved between launches
 func NewCache(cacheFile string, metadata *metadata.Cache, ipfsUrl string) *Cache {
 	urlMap := make(map[string]string)
+	placeholders := make(map[string]placeholder)
 	c := &Cache{&urlMap,
 		&sync.RWMutex{},
 		shell.NewShell(ipfsUrl),
 		cacheFile,
-		nil,
-		metadata}
+		metadata,
+		placeholders}
 
 	// Confirm we can interact with our persitent storage
 	_, err := os.Stat(cacheFile)
@@ -107,9 +120,9 @@ func (c *Cache) Load(filename string) error {
 
 func (c *Cache) QuickLookup(url string) (ipfsPath string, exists bool) {
 	// normalize
-	url, err = urlNormalize(url)
+	url, err := urlNormalize(url)
 	if err != nil {
-		return "", fmt.Errorf("Provided resource doesn't appear to be a link: %v. \nErr: %v", url, err)
+		return "", false
 	}
 	// Check the cache for the provided URL
 	c.urlMapLock.RLock()
@@ -119,7 +132,7 @@ func (c *Cache) QuickLookup(url string) (ipfsPath string, exists bool) {
 	return ipfsPath, exists
 }
 
-func (c *Cache) UrlCacheLookup(url string, urgent bool) (ipfsPath string, err error) {
+func (c *Cache) UrlCacheLookup(url string) (resourceID string, err error) {
 	// normalize
 	url, err = urlNormalize(url)
 	if err != nil {
@@ -128,37 +141,40 @@ func (c *Cache) UrlCacheLookup(url string, urgent bool) (ipfsPath string, err er
 
 	// Check the cache for the provided URL
 	c.urlMapLock.RLock()
-	ipfsPath, exists := (*c.urlMap)[url]
+	resourceID, exists := (*c.urlMap)[url]
 	c.urlMapLock.RUnlock()
 
 	if !exists {
-		// We've been told the request is urgent, expose the audio data
-		// as we work so consumers can get it before we are finished
-		var hotstreamWriter io.Writer
-		if urgent {
-			c.Hotstream, hotstreamWriter = io.Pipe()
-		} else {
-			c.Hotstream = nil
-		}
+		// If it doesn't exist make a placeholder
+		// If we only have two or less placeholders prepare to expose the
+		// download/convert data early
+		newPlaceholder, hotWriter := c.AddPlaceholder(url)
 
-		// Go fetch the provided URL
-		ipfsPath, err = download.Download(url, c.ipfs, c.metadata, hotstreamWriter)
-		if err != nil {
-			return "", fmt.Errorf(("failed to DL requested resource: %v\nerr:%v"), url, err)
-		}
+		// Downloading could take a bit, do that on a new routine so we can return
+		go func(url string, pHolder placeholder) {
+			// Go fetch the provided URL
+			ipfsPath, err := download.Download(url, c.ipfs, c.metadata, hotWriter)
+			if err != nil {
+				log.Printf("failed to DL requested resource: %v\nerr:%v", url, err)
+			}
 
-		// Create the URL => ipfs mapping in the cache
-		c.urlMapLock.Lock()
-		(*c.urlMap)[url] = ipfsPath
-		c.urlMapLock.Unlock()
-		c.Write(c.cacheFilename)
+			// Create the URL => ipfs mapping in the cache
+			c.urlMapLock.Lock()
+			(*c.urlMap)[url] = ipfsPath
+			c.urlMapLock.Unlock()
+			c.Write(c.cacheFilename)
+
+			// Deal with placeholder
+			pHolder.ipfsPath = ipfsPath
+			pHolder.done <- true
+		}(url, newPlaceholder)
 	}
 
-	return ipfsPath, nil
+	return resourceID, nil
 }
 
 func (c *Cache) FetchUrl(url string) (ipfsPath string, r io.ReadCloser, err error) {
-	ipfsPath, err = c.UrlCacheLookup(url, false)
+	ipfsPath, err = c.UrlCacheLookup(url)
 	if err != nil {
 		return ipfsPath, nil, err
 	}
@@ -173,6 +189,64 @@ func (c *Cache) FetchIpfs(ipfsPath string) (r io.ReadCloser, err error) {
 	}
 
 	return c.ipfs.Cat(ipfsPath)
+}
+
+func (c *Cache) AddPlaceholder(url string) (newPlaceholder placeholder, hotWriter *bufio.Writer) {
+	newPlaceholder = placeholder{nil, "", make(chan bool)}
+	if len(c.Placeholders) < numBuffered+1 {
+		pReader, pWriter := io.Pipe()
+		hotWriter = bufio.NewWriter(pWriter)
+		newPlaceholder.reader = pReader
+	}
+	c.Placeholders[url] = newPlaceholder
+
+	return newPlaceholder, hotWriter
+}
+
+// HardResolve will take the url and check it against the Placeholders
+// it ensures that you will always get a reader, blocking if necessary
+func (c *Cache) HardResolve(resourceID string) (ipfsPath string, hotReader io.Reader, err error) {
+	if len(resourceID) < 6 {
+		return "", nil, fmt.Errorf("All resource should be at least 6 char. provided: %s", resourceID)
+	}
+	if resourceID[:6] == "/ipfs/" {
+		r, err := c.FetchIpfs(resourceID)
+		return resourceID, r, err
+	}
+
+	// If we're resolving something it should no longer be held as a placeholder
+	pHolder, exists := c.Placeholders[resourceID]
+	if !exists {
+		return "", nil, fmt.Errorf("Queue contained a resource that was never fetched (%s). Cannot resolve!\n", resourceID)
+	}
+	defer delete(c.Placeholders, resourceID)
+
+	// If we don't have a reader and we're being asked to resolve
+	// we just have to block until we're done with the DL/Conversion
+	if pHolder.reader == nil {
+		if pHolder.ipfsPath == "" {
+			// Block until the placeholder is done processing
+			<-pHolder.done
+		}
+		r, err := c.FetchIpfs(pHolder.ipfsPath)
+		return pHolder.ipfsPath, r, err
+	}
+
+	return "", pHolder.reader, nil
+}
+
+func (c *Cache) SoftResolve(url string) (ipfsPath string, err error) { // If we're resolving something it should no longer be held as a placeholder
+	pHolder, exists := c.Placeholders[url]
+	if !exists {
+		return "", fmt.Errorf("Queue contained a resource that was never fetched (%s). Cannot resolve!\n", url)
+	}
+
+	if pHolder.ipfsPath == "" {
+		return "", nil
+	}
+	defer delete(c.Placeholders, url)
+
+	return pHolder.ipfsPath, nil
 }
 
 // Try and normalize URLs to reduce duplication in resource cache
