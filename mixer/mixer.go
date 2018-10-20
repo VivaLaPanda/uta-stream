@@ -1,14 +1,13 @@
 package mixer
 
 import (
-	"io"
 	"log"
 	"sync"
 	"time"
 
 	"github.com/VivaLaPanda/uta-stream/encoder"
 	"github.com/VivaLaPanda/uta-stream/queue"
-	"github.com/btcsuite/goleveldb/leveldb/cache"
+	"github.com/VivaLaPanda/uta-stream/resource/cache"
 )
 
 // Mixer is in charge of interacting with the queue and resource cache
@@ -41,7 +40,6 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 		packetsPerSecond: packetsPerSecond,
 		currentSong:      &currentSong,
 		queue:            queue,
-		cache:            cache,
 		CurrentSongPath:  "",
 		playLock:         &sync.Mutex{},
 		skipped:          false}
@@ -112,8 +110,7 @@ func (m *Mixer) Pause() {
 
 // Will go to queue and get the next track
 func (m *Mixer) fetchNextSong() (nextSongChan *chan []byte, nextSongPath string, isEmpty bool) {
-	nextSongPath, nextSongReader, isEmpty = m.queue.Pop()
-	var nextSongReader io.Reader
+	nextSongPath, nextSongReader, isEmpty := m.queue.Pop()
 	var err error
 	if isEmpty {
 		return nil, "", true

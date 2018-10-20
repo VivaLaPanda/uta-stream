@@ -130,16 +130,16 @@ func queuer(q *queue.Queue, c *cache.Cache, info *metadata.Cache, qFunc QFunc) h
 				"eg api.example/enqueue?song=https://youtu.be/N8nGig78lNs") // https://youtu.be/nAwTw1aYy6M
 			return
 		}
-		if len(resourceID) < 6 {
+		if len(resourceToQueue) < 6 {
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintln(w, "url should be at least 6 characters.\n")
+			fmt.Fprintln(w, "url should be at least 6 characters.")
 			return
 		}
 
 		// If we're looking at an ipfs path just leave as is
 		// Otherwise go and fetch it
 		if resourceToQueue[:6] != "/ipfs/" {
-			resourceToQueue, err = c.UrlCacheLookup(resourceToQueue)
+			resourceToQueue, err := c.UrlCacheLookup(resourceToQueue)
 			if err != nil {
 				log.Printf("Failed to enqueue song, err: %v", err)
 				return

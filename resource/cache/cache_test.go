@@ -78,14 +78,20 @@ func TestFetchUrl(t *testing.T) {
 	}
 
 	// Get the reader which should contain the song data
-	ipfsPath, songReader, err := c.FetchUrl("https://youtu.be/nAwTw1aYy6M")
+	resourceID, err := c.UrlCacheLookup("https://youtu.be/-Gig53HKpVI?list=PLz31nXegXIhJDnXGEJlaBgRPEfmEoav6O")
 	if err != nil {
-		t.Errorf("Failed to get song from ipfs. Err: %v\n", err)
+		t.Errorf("Failed to get URL. Err: %v\n", err)
 		return
 	}
-	expectedPath := "/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf"
-	if ipfsPath != expectedPath {
-		t.Errorf("IPFS path doesn't match testing default. Expected: %v\nActual: %v\n", expectedPath, ipfsPath)
+	expectedPath := "https://youtu.be/-Gig53HKpVI"
+	if resourceID != expectedPath {
+		t.Errorf("resourceID path doesn't match testing default. Expected: %v\nActual: %v\n", expectedPath, resourceID)
+		return
+	}
+
+	_, songReader, err := c.HardResolve(resourceID)
+	if err != nil {
+		t.Errorf("Failed to get song from ipfs. Err: %v\n", err)
 		return
 	}
 
@@ -99,7 +105,6 @@ func TestFetchUrl(t *testing.T) {
 	// Copy data from reader to writer and then close both
 	io.Copy(songFile, songReader)
 	songFile.Close()
-	songReader.Close()
 
 	// File should be written now. Manual verification is needed to confirm
 	// the data is correct

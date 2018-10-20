@@ -1,7 +1,6 @@
 package download
 
 import (
-	"bufio"
 	"io"
 	"net/url"
 	"os"
@@ -53,12 +52,11 @@ func TestDownloadYoutube(t *testing.T) {
 	// Setup file for streamData
 	outputFile, _ := os.Create("test_split.mp3.test")
 	defer outputFile.Close()
-	bWriter := bufio.NewWriter(outputFile)
 
 	metadata := metadata.NewCache("metadata.db.test")
 
 	// Commence the download
-	ipfsPath, err := downloadYoutube(*urlToDL, sh, metadata, bWriter)
+	ipfsPath, err := downloadYoutube(*urlToDL, sh, metadata, outputFile)
 	if err != nil {
 		t.Errorf("TestDownloadYoutube failed due to an error: %v", err)
 	}
