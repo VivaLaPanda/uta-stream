@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"bufio"
 	"encoding/gob"
 	"fmt"
 	"io"
@@ -25,21 +24,10 @@ type Cache struct {
 	Placeholders  map[string]placeholder
 }
 
-type placeholder struct {
-	reader   io.Reader
-	ipfsPath string
-	done     chan bool
-}
-
 // How many minutes to wait between saves of the cache state
 // This can be long because normal changes to the cache *should* save as well
 // Autosave just helps in case of write failures
 var autosaveTimer time.Duration = 30
-
-// This number determines how many buffered readers to keep for unresolved
-// songs. The higher the number the less chance we are forced to block
-// when we want to play something, but higher numbers also increase memory usage
-var numBuffered = 2
 
 // Function which will provide a new cache struct
 // An cache must be provided a file that it can read/write it's data to
@@ -149,6 +137,7 @@ func (c *Cache) UrlCacheLookup(url string) (resourceID string, err error) {
 		// If we only have two or less placeholders prepare to expose the
 		// download/convert data early
 		newPlaceholder, hotWriter := c.AddPlaceholder(url)
+		resourceID = url
 
 		// Downloading could take a bit, do that on a new routine so we can return
 		go func(url string, pHolder placeholder) {
@@ -173,15 +162,6 @@ func (c *Cache) UrlCacheLookup(url string) (resourceID string, err error) {
 	return resourceID, nil
 }
 
-func (c *Cache) FetchUrl(url string) (ipfsPath string, r io.ReadCloser, err error) {
-	ipfsPath, err = c.UrlCacheLookup(url)
-	if err != nil {
-		return ipfsPath, nil, err
-	}
-	r, err = c.FetchIpfs(ipfsPath)
-	return ipfsPath, r, err
-}
-
 func (c *Cache) FetchIpfs(ipfsPath string) (r io.ReadCloser, err error) {
 	err = c.ipfs.Pin(ipfsPath) // Any time we fetch we also pin. This goes away eventually
 	if err != nil {
@@ -189,64 +169,6 @@ func (c *Cache) FetchIpfs(ipfsPath string) (r io.ReadCloser, err error) {
 	}
 
 	return c.ipfs.Cat(ipfsPath)
-}
-
-func (c *Cache) AddPlaceholder(url string) (newPlaceholder placeholder, hotWriter *bufio.Writer) {
-	newPlaceholder = placeholder{nil, "", make(chan bool)}
-	if len(c.Placeholders) < numBuffered+1 {
-		pReader, pWriter := io.Pipe()
-		hotWriter = bufio.NewWriter(pWriter)
-		newPlaceholder.reader = pReader
-	}
-	c.Placeholders[url] = newPlaceholder
-
-	return newPlaceholder, hotWriter
-}
-
-// HardResolve will take the url and check it against the Placeholders
-// it ensures that you will always get a reader, blocking if necessary
-func (c *Cache) HardResolve(resourceID string) (ipfsPath string, hotReader io.Reader, err error) {
-	if len(resourceID) < 6 {
-		return "", nil, fmt.Errorf("All resource should be at least 6 char. provided: %s", resourceID)
-	}
-	if resourceID[:6] == "/ipfs/" {
-		r, err := c.FetchIpfs(resourceID)
-		return resourceID, r, err
-	}
-
-	// If we're resolving something it should no longer be held as a placeholder
-	pHolder, exists := c.Placeholders[resourceID]
-	if !exists {
-		return "", nil, fmt.Errorf("Queue contained a resource that was never fetched (%s). Cannot resolve!\n", resourceID)
-	}
-	defer delete(c.Placeholders, resourceID)
-
-	// If we don't have a reader and we're being asked to resolve
-	// we just have to block until we're done with the DL/Conversion
-	if pHolder.reader == nil {
-		if pHolder.ipfsPath == "" {
-			// Block until the placeholder is done processing
-			<-pHolder.done
-		}
-		r, err := c.FetchIpfs(pHolder.ipfsPath)
-		return pHolder.ipfsPath, r, err
-	}
-
-	return "", pHolder.reader, nil
-}
-
-func (c *Cache) SoftResolve(url string) (ipfsPath string, err error) { // If we're resolving something it should no longer be held as a placeholder
-	pHolder, exists := c.Placeholders[url]
-	if !exists {
-		return "", fmt.Errorf("Queue contained a resource that was never fetched (%s). Cannot resolve!\n", url)
-	}
-
-	if pHolder.ipfsPath == "" {
-		return "", nil
-	}
-	defer delete(c.Placeholders, url)
-
-	return pHolder.ipfsPath, nil
 }
 
 // Try and normalize URLs to reduce duplication in resource cache
@@ -260,6 +182,10 @@ func urlNormalize(rawUrl string) (normalizedUrl string, err error) {
 	if parsedUrl.Hostname() == "youtube.com" || parsedUrl.Hostname() == "www.youtube.com" {
 		vidID := parsedUrl.Query().Get("v")
 		normalizedUrl = fmt.Sprintf("https://youtu.be/%s", vidID)
+	} else {
+		values := parsedUrl.Query()
+		values.Del("list")
+		parsedUrl.RawQuery = values.Encode()
 	}
 
 	return parsedUrl.String(), nil

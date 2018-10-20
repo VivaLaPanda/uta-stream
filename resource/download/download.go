@@ -23,7 +23,7 @@ var tempDLFolder = "TEMP-DL"
 // without waiting for the DL to finish. If you pass a writer the data will be
 // pushed into that reader at the same time it's written to disk. I recommend
 // a buffered reader, as I'm using TeeReader which works best with buffers
-func Download(rawurl string, ipfs *shell.Shell, metadata *metadata.Cache, streamData io.Writer) (ipfsPath string, err error) {
+func Download(rawurl string, ipfs *shell.Shell, metadata *metadata.Cache, streamData io.WriteCloser) (ipfsPath string, err error) {
 	// Ensure the temporary directory for storing downloads exists
 	if _, err = os.Stat(tempDLFolder); os.IsNotExist(err) {
 		os.Mkdir(tempDLFolder, os.ModePerm)
@@ -47,7 +47,7 @@ func Download(rawurl string, ipfs *shell.Shell, metadata *metadata.Cache, stream
 	}
 }
 
-func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, metadata *metadata.Cache, streamData io.Writer) (ipfsPath string, err error) {
+func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, metadata *metadata.Cache, streamData io.WriteCloser) (ipfsPath string, err error) {
 	// Get the info for the video
 	var vidInfo *ytdl.VideoInfo
 	switch urlToDL.Hostname() {
@@ -113,6 +113,10 @@ func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, metadata *metadata.Cach
 
 		io.Copy(mp3File, sharedReader)
 		log.Printf("Conversion to mp3 complete\n")
+		convOutput.Close()
+		if streamData != nil {
+			streamData.Close()
+		}
 		mp3File.Close()
 	}()
 

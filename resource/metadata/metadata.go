@@ -72,10 +72,17 @@ func (c *Cache) Load(filename string) error {
 	return nil
 }
 
-func (c *Cache) Lookup(ipfsPath string) (title string) {
+func (c *Cache) Lookup(resourceID string) (title string) {
+	if len(resourceID) < 6 {
+		return "Unknown Track"
+	}
+	if resourceID[:6] != "/ipfs/" {
+		return resourceID
+	}
+
 	// Check the cache for the provided URL
 	c.titleMapLock.RLock()
-	title, exists := (*c.titleMap)[ipfsPath]
+	title, exists := (*c.titleMap)[resourceID]
 	c.titleMapLock.RUnlock()
 
 	if !exists {

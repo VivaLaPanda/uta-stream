@@ -30,8 +30,8 @@ func main() {
 
 	info := metadata.NewCache(*metadataFilename)
 	a := auto.NewAQEngine(*autoqFilename, *chainbreakProb, *autoQPrefixLen)
-	q := queue.NewQueue(a, *enableAutoq)
 	c := cache.NewCache(*cacheFilename, info, *ipfsUrl)
+	q := queue.NewQueue(a, c, *enableAutoq)
 	e := mixer.NewMixer(q, c, *packetsPerSecond)
 
 	go func() {

@@ -65,7 +65,7 @@ func TestStore(t *testing.T) {
 	}
 
 	// Add key/value pair
-	err = c.Store("foo", "bar")
+	err = c.Store("/ipfs/foofoofoofoo", "/ipfs/barbarbarbar")
 	if err != nil {
 		t.Errorf("Failed to load cacheFile. Err: %v\n", err)
 	}
@@ -83,20 +83,20 @@ func TestLookup(t *testing.T) {
 		t.Errorf("Failed to stat cacheFile after initing cache. Err: %v\n", err)
 	}
 
-	result := c.Lookup("foo")
+	result := c.Lookup("/ipfs/foofoofoofoo")
 	if result != "Unknown Track" {
 		t.Errorf("Lookup of nonexistent key returned result.\n")
 	}
 
 	// Add key/value pair
-	err = c.Store("foo", "bar")
+	err = c.Store("/ipfs/foofoofoofoo", "/ipfs/barbarbarbar")
 	if err != nil {
 		t.Errorf("Failed to store new k/v pair. Err: %v\n", err)
 	}
 
-	result = c.Lookup("foo")
-	if result != "bar" {
-		t.Errorf("Expected != actual. c.Lookup(\"foo\") => %v. Expected %v", result, "bar")
+	result = c.Lookup("/ipfs/foofoofoofoo")
+	if result != "/ipfs/barbarbarbar" {
+		t.Errorf("Expected != actual. c.Lookup(\"/ipfs/foofoofoofoo\") => %v. Expected %v", result, "/ipfs/barbarbarbar")
 	}
 
 	// Now try to load
@@ -105,9 +105,9 @@ func TestLookup(t *testing.T) {
 		t.Errorf("Failed to load cacheFile. Err: %v\n", err)
 	}
 
-	result = c.Lookup("foo")
-	if result != "bar" {
-		t.Errorf("Expected != actual after write/load. c.Lookup(\"foo\") => %v. Expected %v", result, "bar")
+	result = c.Lookup("/ipfs/foofoofoofoo")
+	if result != "/ipfs/barbarbarbar" {
+		t.Errorf("Expected != actual after write/load. c.Lookup(\"/ipfs/foofoofoofoo\") => %v. Expected %v", result, "/ipfs/barbarbarbar")
 	}
 
 	cleanupCache(cacheTestfile)
