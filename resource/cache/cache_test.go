@@ -91,7 +91,7 @@ func TestFetchUrl(t *testing.T) {
 
 	_, songReader, err := c.HardResolve(resourceID)
 	if err != nil {
-		t.Errorf("Failed to get song from ipfs. Err: %v\n", err)
+		t.Errorf("Failed to resolve resource into reader. Err: %v\n", err)
 		return
 	}
 
