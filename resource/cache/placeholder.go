@@ -11,7 +11,7 @@ import (
 // This number determines how many buffered readers to keep for unresolved
 // songs. The higher the number the less chance we are forced to block
 // when we want to play something, but higher numbers also increase memory usage
-var numBuffered = 1
+var numBuffered = 2
 var bufferSize int64 = 2000 //kb
 
 type placeholder struct {
