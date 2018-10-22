@@ -12,7 +12,7 @@ import (
 // songs. The higher the number the less chance we are forced to block
 // when we want to play something, but higher numbers also increase memory usage
 var numBuffered = 1
-var bufferSize int64 = 2000 //kb
+var bufferSize int64 = 10000 //kb
 
 type placeholder struct {
 	reader   io.Reader
