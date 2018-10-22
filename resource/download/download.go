@@ -81,9 +81,8 @@ func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, metadata *metadata.Cach
 	// Download the mp4
 	var dlDone sync.WaitGroup
 	dlDone.Add(1)
-	log.Printf("Downloading mp4 from %v\n", urlToDL.EscapedPath())
-	log.Printf("Converting mp4 to mp3\n")
 	go func() {
+		log.Printf("Downloading mp4 from %v\n", urlToDL.EscapedPath())
 		err = vidInfo.Download(bestFormat, convInput)
 		if err != nil {
 			log.Printf("ytdl encountered an error: %v\n", err)
@@ -103,6 +102,7 @@ func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, metadata *metadata.Cach
 		return "", fmt.Errorf("failed to create mp3 file. Err: %v", err)
 	}
 	go func() {
+		log.Printf("Converting mp4 to mp3\n")
 		var sharedReader io.Reader
 		bufStreamData := bufio.NewWriter(streamData)
 		if streamData != nil {
@@ -115,6 +115,7 @@ func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, metadata *metadata.Cach
 		log.Printf("Conversion to mp3 complete\n")
 		convOutput.Close()
 		if streamData != nil {
+			bufStreamData.Flush()
 			streamData.Close()
 		}
 		mp3File.Close()

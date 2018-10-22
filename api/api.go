@@ -139,7 +139,8 @@ func queuer(q *queue.Queue, c *cache.Cache, info *metadata.Cache, qFunc QFunc) h
 		// If we're looking at an ipfs path just leave as is
 		// Otherwise go and fetch it
 		if resourceToQueue[:6] != "/ipfs/" {
-			resourceToQueue, err := c.UrlCacheLookup(resourceToQueue)
+			var err error
+			resourceToQueue, err = c.UrlCacheLookup(resourceToQueue)
 			if err != nil {
 				log.Printf("Failed to enqueue song, err: %v", err)
 				return

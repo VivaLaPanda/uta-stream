@@ -3,12 +3,16 @@ package cache
 import (
 	"fmt"
 	"io"
+
+	"gopkg.in/djherbis/buffer.v1"
+	"gopkg.in/djherbis/nio.v2"
 )
 
 // This number determines how many buffered readers to keep for unresolved
 // songs. The higher the number the less chance we are forced to block
 // when we want to play something, but higher numbers also increase memory usage
-var numBuffered = 2
+var numBuffered = 1
+var bufferSize int64 = 2000 //kb
 
 type placeholder struct {
 	reader   io.Reader
@@ -16,15 +20,17 @@ type placeholder struct {
 	done     chan bool
 }
 
-func (c *Cache) AddPlaceholder(url string) (newPlaceholder placeholder, hotWriter io.WriteCloser) {
-	newPlaceholder = placeholder{nil, "", make(chan bool, 1)}
-	pReader, pWriter := io.Pipe()
-	if len(c.Placeholders) < numBuffered+1 {
-		newPlaceholder.reader = pReader
+func (c *Cache) AddPlaceholder(url string) (newPlaceholder *placeholder, hotWriter io.WriteCloser) {
+	newPlaceholder = &placeholder{nil, "", make(chan bool, 1)}
+	// If we don't have enough buffer, prepare the placeholder for passing data
+	// directly to the mixer
+	if len(c.Placeholders) < numBuffered {
+		buf := buffer.New(bufferSize * 1024) // 2000 KB In memory Buffer
+		newPlaceholder.reader, hotWriter = nio.Pipe(buf)
 	}
 	c.Placeholders[url] = newPlaceholder
 
-	return newPlaceholder, pWriter
+	return newPlaceholder, hotWriter
 }
 
 // HardResolve will take the url and check it against the Placeholders

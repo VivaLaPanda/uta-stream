@@ -16,12 +16,13 @@ import (
 )
 
 type Cache struct {
-	urlMap        *map[string]string
-	urlMapLock    *sync.RWMutex
-	ipfs          *shell.Shell
-	cacheFilename string
-	metadata      *metadata.Cache
-	Placeholders  map[string]placeholder
+	urlMap          *map[string]string
+	urlMapLock      *sync.RWMutex
+	ipfs            *shell.Shell
+	cacheFilename   string
+	metadata        *metadata.Cache
+	Placeholders    map[string]*placeholder
+	activeDownloads chan bool
 }
 
 // How many minutes to wait between saves of the cache state
@@ -29,18 +30,23 @@ type Cache struct {
 // Autosave just helps in case of write failures
 var autosaveTimer time.Duration = 30
 
+// Used to limit how many ongoing downloads we have. useful to make sure
+// Youtube doesn't get mad at us
+var maxActiveDownloads = 3
+
 // Function which will provide a new cache struct
 // An cache must be provided a file that it can read/write it's data to
 // so that the cache is preserved between launches
 func NewCache(cacheFile string, metadata *metadata.Cache, ipfsUrl string) *Cache {
 	urlMap := make(map[string]string)
-	placeholders := make(map[string]placeholder)
+	placeholders := make(map[string]*placeholder)
 	c := &Cache{&urlMap,
 		&sync.RWMutex{},
 		shell.NewShell(ipfsUrl),
 		cacheFile,
 		metadata,
-		placeholders}
+		placeholders,
+		make(chan bool, maxActiveDownloads)}
 
 	// Confirm we can interact with our persitent storage
 	_, err := os.Stat(cacheFile)
@@ -140,12 +146,16 @@ func (c *Cache) UrlCacheLookup(url string) (resourceID string, err error) {
 		resourceID = url
 
 		// Downloading could take a bit, do that on a new routine so we can return
-		go func(url string, pHolder placeholder) {
+		go func(url string, pHolder *placeholder, activeDownloads chan bool) {
+			// Make sure we aren't past the download limit
+			activeDownloads <- true
 			// Go fetch the provided URL
 			ipfsPath, err := download.Download(url, c.ipfs, c.metadata, hotWriter)
 			if err != nil {
 				log.Printf("failed to DL requested resource: %v\nerr:%v", url, err)
 			}
+			// Register that we're done with the DL
+			<-activeDownloads
 
 			// Create the URL => ipfs mapping in the cache
 			c.urlMapLock.Lock()
@@ -156,7 +166,7 @@ func (c *Cache) UrlCacheLookup(url string) (resourceID string, err error) {
 			// Deal with placeholder
 			pHolder.ipfsPath = ipfsPath
 			pHolder.done <- true
-		}(url, newPlaceholder)
+		}(url, newPlaceholder, c.activeDownloads)
 	}
 
 	return resourceID, nil
