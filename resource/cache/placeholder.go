@@ -11,7 +11,7 @@ import (
 // This number determines how many buffered readers to keep for unresolved
 // songs. The higher the number the less chance we are forced to block
 // when we want to play something, but higher numbers also increase memory usage
-var numBuffered = 2
+var numBuffered = 1
 var bufferSize int64 = 2000 //kb
 
 type placeholder struct {
@@ -65,16 +65,20 @@ func (c *Cache) HardResolve(resourceID string) (ipfsPath string, hotReader io.Re
 	return "", pHolder.reader, nil
 }
 
-func (c *Cache) SoftResolve(url string) (ipfsPath string, err error) { // If we're resolving something it should no longer be held as a placeholder
-	pHolder, exists := c.Placeholders[url]
+func (c *Cache) SoftResolve(resourceID string) (ipfsPath string, err error) {
+	if len(resourceID) >= 6 && resourceID[:6] == "/ipfs/" {
+		return resourceID, nil
+	}
+	pHolder, exists := c.Placeholders[resourceID]
 	if !exists {
-		return "", fmt.Errorf("Queue contained a resource that was never fetched (%s). Cannot resolve!\n", url)
+		return "", fmt.Errorf("Queue contained a resource that was never fetched (%s). Cannot resolve!\n", resourceID)
 	}
 
 	if pHolder.ipfsPath == "" {
 		return "", nil
 	}
-	defer delete(c.Placeholders, url)
+	// If we're resolving something it should no longer be held as a placeholder
+	defer delete(c.Placeholders, resourceID)
 
 	return pHolder.ipfsPath, nil
 }
