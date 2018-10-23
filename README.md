@@ -40,7 +40,7 @@ Implemented:
 In Progress:
 * Downloaders
     - soundcloud
-* Optional tiny frontend for interacting with API
+* Optional tiny frontend for interacting with API (https://github.com/VivaLaPanda/uta-steam-frontend)
 * Playlist support
 
 Ready to start:
