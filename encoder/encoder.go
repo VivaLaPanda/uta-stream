@@ -10,7 +10,7 @@ import (
 // Bigger packet buffer means more resiliance but may cause
 // strange behavior when skipping a song. Shouldn't need to be changed often
 // so we're not exposing it as an arg.
-var packetBufferSize = 8
+var packetBufferSize = 16
 
 // EncodeMP3 returns a channel containing the data found at the provided file
 // Works off a reader. WARNING: Requires 2x the reader in memory until it's

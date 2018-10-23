@@ -19,7 +19,6 @@ func cleanupAutoq(autoqTestfile string) {
 func TestWrite(t *testing.T) {
 	// Ensure the file isn't already there.
 	autoqTestfile := "TestWriteQfile.test"
-	cleanupAutoq(autoqTestfile)
 	q := NewAQEngine(autoqTestfile, 0, 1)
 	_, err := os.Stat(autoqTestfile)
 	if err != nil {
@@ -38,7 +37,6 @@ func TestWrite(t *testing.T) {
 func TestLoad(t *testing.T) {
 	// Ensure the file isn't already there.
 	autoqTestfile := "TestLoadQfile.test"
-	cleanupAutoq(autoqTestfile)
 	q := NewAQEngine(autoqTestfile, 0, 1)
 	_, err := os.Stat(autoqTestfile)
 	if err != nil {
@@ -58,7 +56,6 @@ func TestNotifyPlayed(t *testing.T) {
 	// Bare bones notifyplayed test
 	// Ensure the file isn't already there.
 	autoqTestfile := "TestLoadQfile.test"
-	cleanupAutoq(autoqTestfile)
 	q := NewAQEngine(autoqTestfile, 0, 1)
 	_, err := os.Stat(autoqTestfile)
 	if err != nil {
@@ -74,8 +71,7 @@ func TestVpop(t *testing.T) {
 	// Simple test of vpop
 	// Ensure the file isn't already there.
 	autoqTestfile := "TestLoadQfile.test"
-	cleanupAutoq(autoqTestfile)
-	q := NewAQEngine(autoqTestfile, 0, 1)
+	q := NewAQEngine(autoqTestfile, 1, 1)
 	_, err := os.Stat(autoqTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)
@@ -104,4 +100,48 @@ func TestVpop(t *testing.T) {
 	}
 
 	cleanupAutoq(autoqTestfile)
+}
+
+// func TestMigrate(t *testing.T) {
+// 	// Ensure the file isn't already there.
+// 	autoqTestfile := "autoq.db"
+// 	q := NewAQEngine(autoqTestfile, 0, 1)
+// 	_, err := os.Stat(autoqTestfile)
+// 	if err != nil {
+// 		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)
+// 	}
+//
+// 	// Now try to load
+// 	err = q.Load(autoqTestfile)
+// 	if err != nil {
+// 		t.Errorf("Failed to load qfile. Err: %v\n", err)
+// 	}
+//
+// 	for k, v := range *q.markovChain.chainData {
+// 		(*q.markovChain.chainData)[k] = removeDuplicates(v)
+// 		if len((*q.markovChain.chainData)[k]) > 3 {
+// 			(*q.markovChain.chainData)[k] = (*q.markovChain.chainData)[k][:3]
+// 		}
+// 	}
+//
+// 	q.Write(autoqTestfile)
+// }
+
+func removeDuplicates(elements []string) []string {
+	// Use map to record duplicates as we find them.
+	encountered := map[string]bool{}
+	result := []string{}
+
+	for v := range elements {
+		if encountered[elements[v]] == true {
+			// Do not add duplicate.
+		} else {
+			// Record this element as an encountered element.
+			encountered[elements[v]] = true
+			// Append to result slice.
+			result = append(result, elements[v])
+		}
+	}
+	// Return the new slice.
+	return result
 }

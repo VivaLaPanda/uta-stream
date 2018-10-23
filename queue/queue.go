@@ -27,26 +27,28 @@ func NewQueue(aqEngine *auto.AQEngine, cache *cache.Cache, enableAutoq bool) *Qu
 }
 
 // Returns the audio resource next in the queue
-func (q *Queue) Pop() (ipfsPath string, songReader io.Reader, emptyq bool) {
+func (q *Queue) Pop() (ipfsPath string, songReader io.Reader, emptyq bool, fromAuto bool) {
 	// If there is nothing to queue and we have autoq enabled,
 	// get from autoq. If autoq gives us an empty string (no audio to play)
 	// or autoq is off, return that the queue is empty
+	fromAuto = false
 	if len(q.fifo) == 0 {
 		if q.AutoqEnabled {
+			fromAuto = true
 			ipfsPath = q.autoq.Vpop()
 			if ipfsPath == "" {
-				return "", nil, true
+				return "", nil, true, fromAuto
 			}
 
 			ipfsPath, songReader, err := q.cache.HardResolve(ipfsPath)
 			if err != nil {
 				log.Printf("Issue when resolving resource from AutoQ. Err: %v\n", err)
-				return "", nil, true
+				return "", nil, true, fromAuto
 			}
 
-			return ipfsPath, songReader, false
+			return ipfsPath, songReader, false, fromAuto
 		} else {
-			return "", nil, true
+			return "", nil, true, fromAuto
 		}
 	}
 
@@ -61,10 +63,10 @@ func (q *Queue) Pop() (ipfsPath string, songReader io.Reader, emptyq bool) {
 	ipfsPath, songReader, err := q.cache.HardResolve(resourceID)
 	if err != nil {
 		log.Printf("Issue when resolving resource from Queue. Err: %v\n", err)
-		return "", nil, true
+		return "", nil, true, fromAuto
 	}
 
-	return ipfsPath, songReader, false
+	return ipfsPath, songReader, false, fromAuto
 }
 
 func (q *Queue) IsEmpty() bool {

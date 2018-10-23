@@ -27,7 +27,7 @@ type Mixer struct {
 
 // Bigger packet buffer means more resiliance but may cause
 // strange behavior when skipping a song. In my experience a small value is best
-var packetBufferSize = 8
+var packetBufferSize = 16
 
 // Packets-per-second sacrifices reliability for synchronization
 // Higher means more synchornized streams. Minimum should be 1, super large
@@ -67,12 +67,16 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 				// TODO: This should detect skips and not notify if the song was skipped
 				mixer.queue.NotifyDone(mixer.CurrentSongPath)
 			}
+
 			if mixer.skipped {
 				mixer.skipped = false
 			}
 
-			tempSong, tempPath, isEmpty := mixer.fetchNextSong()
+			tempSong, tempPath, isEmpty, fromAuto := mixer.fetchNextSong()
 			if !isEmpty && (tempSong != nil) {
+				if fromAuto {
+					mixer.skipped = true
+				}
 				mixer.currentSong = tempSong
 				mixer.CurrentSongPath = tempPath
 				broadcastPacket := <-*mixer.currentSong
@@ -109,19 +113,19 @@ func (m *Mixer) Pause() {
 }
 
 // Will go to queue and get the next track
-func (m *Mixer) fetchNextSong() (nextSongChan *chan []byte, nextSongPath string, isEmpty bool) {
-	nextSongPath, nextSongReader, isEmpty := m.queue.Pop()
+func (m *Mixer) fetchNextSong() (nextSongChan *chan []byte, nextSongPath string, isEmpty bool, fromAuto bool) {
+	nextSongPath, nextSongReader, isEmpty, fromAuto := m.queue.Pop()
 	var err error
 	if isEmpty {
-		return nil, "", true
+		return nil, "", true, fromAuto
 	}
 
 	// Start encoding for broadcast
 	nextSongChan, err = encoder.EncodeMP3(nextSongReader, m.packetsPerSecond)
 	if err != nil {
 		log.Printf("Failed to encode song (%v). Err: %v\n", nextSongPath, err)
-		return nil, "", true
+		return nil, "", true, fromAuto
 	}
 
-	return nextSongChan, nextSongPath, false
+	return nextSongChan, nextSongPath, false, fromAuto
 }
