@@ -159,6 +159,9 @@ func (c *chain) generate() string {
 	// Randchoice provides a song randomly from the chain, without regard to the last
 	// song
 	var randChoice string
+	if len(*c.chainData) == 0 {
+		return ""
+	}
 	idxToTarget := rand.Intn(len(*c.chainData))
 	idx := 0
 	for _, v := range *c.chainData {
