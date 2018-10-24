@@ -118,7 +118,7 @@ func TestVpop(t *testing.T) {
 // 	}
 //
 // 	for k, v := range *q.markovChain.chainData {
-// 		(*q.markovChain.chainData)[k] = removeDuplicates(v)
+// 		(*q.markovChain.chainData)[k] = cleanAutoq(v, k)
 // 		if len((*q.markovChain.chainData)[k]) > 3 {
 // 			(*q.markovChain.chainData)[k] = (*q.markovChain.chainData)[k][:3]
 // 		}
@@ -127,13 +127,13 @@ func TestVpop(t *testing.T) {
 // 	q.Write(autoqTestfile)
 // }
 
-func removeDuplicates(elements []string) []string {
+func cleanAutoq(elements []string, key string) []string {
 	// Use map to record duplicates as we find them.
 	encountered := map[string]bool{}
 	result := []string{}
 
 	for v := range elements {
-		if encountered[elements[v]] == true {
+		if encountered[elements[v]] == true || key == elements[v] {
 			// Do not add duplicate.
 		} else {
 			// Record this element as an encountered element.
