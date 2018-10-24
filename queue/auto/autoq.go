@@ -159,11 +159,17 @@ func (c *chain) generate() string {
 	// Randchoice provides a song randomly from the chain, without regard to the last
 	// song
 	var randChoice string
+	idxToTarget := rand.Intn(len(*c.chainData))
+	idx := 0
 	for _, v := range *c.chainData {
-		randChoice = v[rand.Intn(len(v))]
-		if randChoice != c.prefix[len(c.prefix)-1] {
-			break
+		if idx == idxToTarget {
+			randChoice = v[rand.Intn(len(v))]
+			if randChoice != c.prefix[len(c.prefix)-1] {
+				break
+			}
+			idxToTarget += 1
 		}
+		idx += 1
 	}
 
 	// If there are no known songs, just pick something at random
@@ -172,7 +178,7 @@ func (c *chain) generate() string {
 	}
 
 	// Some chance of picking a random song based on chainbreakProb
-	if c.chainbreakProb != 0 {
+	if c.chainbreakProb != 0 && len(choices) < 4 {
 		randInt := int(1 / c.chainbreakProb)
 		if rand.Intn(randInt) == 1 {
 			return randChoice
