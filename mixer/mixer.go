@@ -24,7 +24,7 @@ type Mixer struct {
 	queue            *queue.Queue
 	CurrentSongPath  string
 	playLock         *sync.Mutex
-	skipped          bool
+	learnFrom        bool
 }
 
 // NewMixer will return a mixer struct. Said struct will have the provided queue
@@ -43,12 +43,11 @@ func NewMixer(queue *queue.Queue, packetsPerSecond int) *Mixer {
 		queue:            queue,
 		CurrentSongPath:  "",
 		playLock:         &sync.Mutex{},
-		skipped:          false}
+		learnFrom:        false}
 	close(currentSong)
 	// Spin up the job to cast from the current song to our output
 	// and handle song transitions
 	go func() {
-		learnFrom := true
 		for true {
 			for broadcastPacket := range *mixer.currentSong {
 				// We can succesfully read from the current song, all is good
@@ -64,23 +63,16 @@ func NewMixer(queue *queue.Queue, packetsPerSecond int) *Mixer {
 			// We couldn't play from current, assume that the song ended
 			// Also, if we just recieved a skip, then we don't want to use that
 			// song to train qutoq
-			if mixer.CurrentSongPath != "" && !mixer.skipped {
-				// If we were just playing something unknown, the autoq don't care
-				// TODO: This should detect skips and not notify if the song was skipped
-				mixer.queue.NotifyDone(mixer.CurrentSongPath, learnFrom)
-			}
-
-			// We just existed a song, so make sure skipped is false because it shouldn't
-			// apply to the song we are about to play
-			if mixer.skipped {
-				mixer.skipped = false
+			if mixer.CurrentSongPath != "" {
+				mixer.queue.NotifyDone(mixer.CurrentSongPath, mixer.learnFrom)
+				mixer.learnFrom = true
 			}
 
 			// Get the next song channel and associated metadata
 			// Start broadcasting right away and set some flags/state values
 			tempSong, tempPath, isEmpty, fromAuto := mixer.fetchNextSong()
 			if !isEmpty && (tempSong != nil) {
-				learnFrom = !fromAuto
+				mixer.learnFrom = !fromAuto
 				mixer.currentSong = tempSong
 				mixer.CurrentSongPath = tempPath
 				broadcastPacket := <-*mixer.currentSong
@@ -108,7 +100,7 @@ func (m *Mixer) Skip() {
 		recover()
 	}()
 
-	m.skipped = true
+	m.learnFrom = false
 	close(*m.currentSong)
 }
 

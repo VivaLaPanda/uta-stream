@@ -32,7 +32,7 @@ func main() {
 	a := auto.NewAQEngine(*autoqFilename, *chainbreakProb, *autoQPrefixLen)
 	c := cache.NewCache(*cacheFilename, info, *ipfsUrl)
 	q := queue.NewQueue(a, c, *enableAutoq)
-	e := mixer.NewMixer(q, c, *packetsPerSecond)
+	e := mixer.NewMixer(q, *packetsPerSecond)
 
 	go func() {
 		stream.ServeAudioOverHttp(e.Output, *packetsPerSecond, *audioPort)
