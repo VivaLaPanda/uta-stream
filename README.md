@@ -1,4 +1,4 @@
-# Uta Stream [![](https://godoc.org/github.com/VivaLaPanda/uta-stream?status.svg)](http://godoc.org/github.com/VivaLaPanda/uta-stream)
+# UtaStream [![](https://godoc.org/github.com/VivaLaPanda/uta-stream?status.svg)](http://godoc.org/github.com/VivaLaPanda/uta-stream)
 
 Simple(ish) webservice in Go for managing an online radio.
 Core features:

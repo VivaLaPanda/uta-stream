@@ -15,7 +15,8 @@ type authMiddleware struct {
 	basePath   string
 }
 
-// Initialize it somewhere
+// NewAuthMiddleware will prepare the struct which handles state for the
+// authorization middleware
 func NewAuthMiddleware(authConfigFile string, basePath string) (amw *authMiddleware, err error) {
 	var tokenRoles map[string][]string
 	authMiddleware := &authMiddleware{tokenRoles, false, basePath}

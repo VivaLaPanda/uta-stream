@@ -1,3 +1,5 @@
+// Package autoq provides a set of components to suggest songs to play based on a
+// fairly simple markov chain trained on the provided play history.
 package auto
 
 import (
@@ -21,13 +23,11 @@ var autosaveTimer time.Duration = 5
 
 // Function which will provide a new autoq struct
 // An autoq must be provided a file that it can read/write it's data to
-// so that the chain is preserved between launches
+// so that the chain is preserved between launches. Chainbreak prob will determine
+// how often to give a random suggestion instead of the *real* one. Prefix length
+// determines how far back the autoq's "memory" goes back. Longer = more predictable
 func NewAQEngine(qfile string, chainbreakProb float64, prefixLength int) *AQEngine {
 	q := &AQEngine{newChain(prefixLength, chainbreakProb), make(chan string)}
-
-	// startBuildListener will watch a channel for new songs and add their data into
-	// the chain
-	q.markovChain.startBuildListener(q.playedSongs)
 
 	// Confirm we can interact with our persitent storage
 	_, err := os.Stat(qfile)
@@ -100,8 +100,22 @@ func (q *AQEngine) Vpop() string {
 
 // The interface for external callers to add to the markov chain
 // In our case we use it to notify the chain that a song was played in full
-func (q *AQEngine) NotifyPlayed(filename string) {
-	q.playedSongs <- filename
+// learn from allows you to advance the chain without adding data if false
+func (q *AQEngine) NotifyPlayed(resourceID string, learnFrom bool) {
+	q.markovChain.chainLock.Lock()
+	defer q.markovChain.chainLock.Unlock()
+
+	key := q.markovChain.prefix.String()
+	duplicate := false
+	for _, value := range (*q.markovChain.chainData)[key] {
+		if value == resourceID {
+			duplicate = true
+		}
+	}
+	if !duplicate && learnFrom {
+		(*q.markovChain.chainData)[key] = append((*q.markovChain.chainData)[key], resourceID)
+	}
+	q.markovChain.prefix.shift(resourceID)
 }
 
 // prefix is a Markov chain prefix of one or more song.
@@ -133,20 +147,6 @@ type chain struct {
 func newChain(prefixLen int, chainbreakProb float64) *chain {
 	chainData := make(map[string][]string)
 	return &chain{&chainData, make(prefix, prefixLen), &sync.RWMutex{}, prefixLen, chainbreakProb}
-}
-
-// Build reads song uris from the provided channel
-// parses it into prefixes and suffixes that are stored in chain.
-func (c *chain) startBuildListener(input chan string) {
-	go func() {
-		for s := range input {
-			c.chainLock.Lock()
-			key := c.prefix.String()
-			(*c.chainData)[key] = append((*c.chainData)[key], s)
-			c.prefix.shift(s)
-			c.chainLock.Unlock()
-		}
-	}()
 }
 
 // Returns the next song to play

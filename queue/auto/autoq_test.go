@@ -62,7 +62,7 @@ func TestNotifyPlayed(t *testing.T) {
 		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)
 	}
 
-	q.NotifyPlayed("test")
+	q.NotifyPlayed("test", true)
 
 	// If we didn't panic than this test is a pass
 }
@@ -78,10 +78,10 @@ func TestVpop(t *testing.T) {
 	}
 
 	// Create a chain which is a cycle between test_a and test_b states
-	q.NotifyPlayed("test_a")
-	q.NotifyPlayed("test_b")
-	q.NotifyPlayed("test_a")
-	q.NotifyPlayed("test_b")
+	q.NotifyPlayed("test_a", true)
+	q.NotifyPlayed("test_b", true)
+	q.NotifyPlayed("test_a", true)
+	q.NotifyPlayed("test_b", true)
 	time.Sleep(1) // Necessary because NotifyPlayed is async
 
 	// Since the last song was a b, the next should be an a
@@ -91,7 +91,7 @@ func TestVpop(t *testing.T) {
 	}
 
 	// Play an a, now the next should be a b
-	q.NotifyPlayed("test_a")
+	q.NotifyPlayed("test_a", true)
 	time.Sleep(1)
 	song = q.Vpop()
 
@@ -102,30 +102,30 @@ func TestVpop(t *testing.T) {
 	cleanupAutoq(autoqTestfile)
 }
 
-// func TestMigrate(t *testing.T) {
-// 	// Ensure the file isn't already there.
-// 	autoqTestfile := "autoq.db"
-// 	q := NewAQEngine(autoqTestfile, 0, 1)
-// 	_, err := os.Stat(autoqTestfile)
-// 	if err != nil {
-// 		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)
-// 	}
-//
-// 	// Now try to load
-// 	err = q.Load(autoqTestfile)
-// 	if err != nil {
-// 		t.Errorf("Failed to load qfile. Err: %v\n", err)
-// 	}
-//
-// 	for k, v := range *q.markovChain.chainData {
-// 		(*q.markovChain.chainData)[k] = cleanAutoq(v, k)
-// 		if len((*q.markovChain.chainData)[k]) > 3 {
-// 			(*q.markovChain.chainData)[k] = (*q.markovChain.chainData)[k][:3]
-// 		}
-// 	}
-//
-// 	q.Write(autoqTestfile)
-// }
+func TestMigrate(t *testing.T) {
+	// Ensure the file isn't already there.
+	autoqTestfile := "autoq.db"
+	q := NewAQEngine(autoqTestfile, 0, 1)
+	_, err := os.Stat(autoqTestfile)
+	if err != nil {
+		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)
+	}
+
+	// Now try to load
+	err = q.Load(autoqTestfile)
+	if err != nil {
+		t.Errorf("Failed to load qfile. Err: %v\n", err)
+	}
+
+	for k, v := range *q.markovChain.chainData {
+		(*q.markovChain.chainData)[k] = cleanAutoq(v, k)
+		if len((*q.markovChain.chainData)[k]) > 3 {
+			(*q.markovChain.chainData)[k] = (*q.markovChain.chainData)[k][:3]
+		}
+	}
+
+	q.Write(autoqTestfile)
+}
 
 func cleanAutoq(elements []string, key string) []string {
 	// Use map to record duplicates as we find them.

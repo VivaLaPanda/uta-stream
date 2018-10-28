@@ -1,3 +1,5 @@
+// Package stream provides the logic to connect a packet stream to a plurality
+// of HTTP clients.
 package stream
 
 import (

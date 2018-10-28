@@ -1,3 +1,5 @@
+// Package download provides functions that given a url to certain sites
+// can fetch mp3 from them.
 package download
 
 import (

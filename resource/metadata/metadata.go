@@ -1,3 +1,4 @@
+// Package metadata provides an statefull map between a resourceID and a song title.
 package metadata
 
 import (

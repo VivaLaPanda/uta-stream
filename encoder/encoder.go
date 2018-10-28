@@ -1,3 +1,5 @@
+// Package encoder provides utilities for moving between raw MP3 data and
+// the packet stream expected by most uta-stream components.
 package encoder
 
 import (
@@ -13,9 +15,9 @@ import (
 var packetBufferSize = 16
 
 // EncodeMP3 returns a channel containing the data found at the provided file
-// Works off a reader. WARNING: Requires 2x the reader in memory until it's
-// done. Eventually this will be fixed by handling bitrate estimation and
-// streaming in parallel
+// Works off a reader. PacketsPerSecond MUST match that provided to the mixer
+// a mismatch will result in either stuttering playback(mixer>encoder) or client
+// desync(encoder>mixer). 2 is a resonable default.
 func EncodeMP3(mp3Data io.Reader, packetsPerSecond int) (*chan []byte, error) {
 	// create the pipe and tee reader
 	pipeReader, pipeWriter := io.Pipe()

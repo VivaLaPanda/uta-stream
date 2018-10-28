@@ -1,3 +1,5 @@
+// Package cache contains components used to wrap song download logic so that
+// tracks need only be downloaded/converted once.
 package cache
 
 import (
@@ -15,6 +17,8 @@ import (
 	shell "github.com/ipfs/go-ipfs-api"
 )
 
+// Cache is a struct which tracks the necessary state to translate
+// resourceIDs into resolveable ipfs hashes or readers
 type Cache struct {
 	urlMap          *map[string]string
 	urlMapLock      *sync.RWMutex
@@ -36,7 +40,9 @@ var maxActiveDownloads = 3
 
 // Function which will provide a new cache struct
 // An cache must be provided a file that it can read/write it's data to
-// so that the cache is preserved between launches
+// so that the cache is preserved between launches. The ipfsurl will determine
+// the daemon used to store/fetch ipfs resources. Allows for decoupling the storage
+// engine from the cache.
 func NewCache(cacheFile string, metadata *metadata.Cache, ipfsUrl string) *Cache {
 	urlMap := make(map[string]string)
 	placeholders := make(map[string]*placeholder)
@@ -112,6 +118,8 @@ func (c *Cache) Load(filename string) error {
 	return nil
 }
 
+// Quick lookup checks the cache for a url, but if it fails to find the resource
+// it will not try to download it and will just return.
 func (c *Cache) QuickLookup(url string) (ipfsPath string, exists bool) {
 	// normalize
 	url, err := urlNormalize(url)
@@ -126,6 +134,8 @@ func (c *Cache) QuickLookup(url string) (ipfsPath string, exists bool) {
 	return ipfsPath, exists
 }
 
+// UrlCacheLookup will check the cache for the provided url, but on a cache miss
+// it will download the resource and add it to the cache, then return the hash
 func (c *Cache) UrlCacheLookup(url string) (resourceID string, err error) {
 	// normalize
 	url, err = urlNormalize(url)
@@ -172,6 +182,8 @@ func (c *Cache) UrlCacheLookup(url string) (resourceID string, err error) {
 	return resourceID, nil
 }
 
+// Fetch IPFS will get the provided IPFS resource and return the reader of its
+// data
 func (c *Cache) FetchIpfs(ipfsPath string) (r io.ReadCloser, err error) {
 	err = c.ipfs.Pin(ipfsPath) // Any time we fetch we also pin. This goes away eventually
 	if err != nil {

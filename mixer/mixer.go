@@ -1,3 +1,9 @@
+// This mixer package provides the link between songs in a queue and
+// a continuous playble byte stream
+// Mixer is in charge of interacting with the queue to use the provided reader
+// to construct a stream of audio packets that are sized such to keep the stream
+// rate equal to the playback rate. Additionally Mixer is tasked with transitioning
+// between songs, and trying to make that as smooth as possible.package mixer
 package mixer
 
 import (
@@ -7,14 +13,10 @@ import (
 
 	"github.com/VivaLaPanda/uta-stream/encoder"
 	"github.com/VivaLaPanda/uta-stream/queue"
-	"github.com/VivaLaPanda/uta-stream/resource/cache"
 )
 
-// Mixer is in charge of interacting with the queue and resource cache
-// to go from a queue of song hashes to a stream of audio data. It has
-// logic to ensure minimal delay between songs by processing current/next
-// in parallel. Mixer can be considered the key component that ties together
-// all the rest
+// Mixer is a struct which contains the persistent state necessary to talk
+// to the queue and to interact with playback as it happens
 type Mixer struct {
 	Output           chan []byte
 	packetsPerSecond int
@@ -25,18 +27,17 @@ type Mixer struct {
 	skipped          bool
 }
 
-// Bigger packet buffer means more resiliance but may cause
-// strange behavior when skipping a song. In my experience a small value is best
-var packetBufferSize = 16
-
-// Packets-per-second sacrifices reliability for synchronization
-// Higher means more synchornized streams. Minimum should be 1, super large
-// values have undefined behaviour
-// 2 is a reasonable default
-func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mixer {
-	currentSong := make(chan []byte, packetBufferSize)
+// NewMixer will return a mixer struct. Said struct will have the provided queue
+// attached for internal use. The Output channel is public, and the only way
+// consume the mixer's output. You are also provided the Current song path so you
+// can check what is currently playing.
+// A reasonable default for packetsPerSecond is 2, but it determines whether
+// we send data in larger  or smaller chunks to the clients
+// The mixer object will be tied to a goroutine which will populate the output
+func NewMixer(queue *queue.Queue, packetsPerSecond int) *Mixer {
+	currentSong := make(chan []byte, 1)
 	mixer := &Mixer{
-		Output:           make(chan []byte, packetBufferSize),
+		Output:           make(chan []byte, 1),
 		packetsPerSecond: packetsPerSecond,
 		currentSong:      &currentSong,
 		queue:            queue,
@@ -47,6 +48,7 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 	// Spin up the job to cast from the current song to our output
 	// and handle song transitions
 	go func() {
+		learnFrom := true
 		for true {
 			for broadcastPacket := range *mixer.currentSong {
 				// We can succesfully read from the current song, all is good
@@ -65,21 +67,29 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 			if mixer.CurrentSongPath != "" && !mixer.skipped {
 				// If we were just playing something unknown, the autoq don't care
 				// TODO: This should detect skips and not notify if the song was skipped
-				mixer.queue.NotifyDone(mixer.CurrentSongPath)
+				mixer.queue.NotifyDone(mixer.CurrentSongPath, learnFrom)
 			}
 
+			// We just existed a song, so make sure skipped is false because it shouldn't
+			// apply to the song we are about to play
 			if mixer.skipped {
 				mixer.skipped = false
 			}
 
+			// Get the next song channel and associated metadata
+			// Start broadcasting right away and set some flags/state values
 			tempSong, tempPath, isEmpty, fromAuto := mixer.fetchNextSong()
 			if !isEmpty && (tempSong != nil) {
-				if fromAuto {
-					mixer.skipped = true
-				}
+				learnFrom = !fromAuto
 				mixer.currentSong = tempSong
 				mixer.CurrentSongPath = tempPath
 				broadcastPacket := <-*mixer.currentSong
+				mixer.Output <- broadcastPacket
+
+				// We dupliacte the send here because going around the loop tends to
+				// introduce a slight delay. This buffers us a little. Shouldn't be a desync
+				// issue unless you listen for a *long* time
+				broadcastPacket = <-*mixer.currentSong
 				mixer.Output <- broadcastPacket
 			} else {
 				time.Sleep(2 * time.Second)
@@ -90,18 +100,24 @@ func NewMixer(queue *queue.Queue, cache *cache.Cache, packetsPerSecond int) *Mix
 	return mixer
 }
 
-// Will swap the next song in place of the current one.
+// Skip will force the current song to end, thus triggering an attempt to
+// fetch the next song. Will not result in the autoq being trained
 func (m *Mixer) Skip() {
+	// We *could* get a close on closed channel error, which we want to ignore.
+	defer func() {
+		recover()
+	}()
+
 	m.skipped = true
 	close(*m.currentSong)
 }
 
-// Will toggle playing by allowing writes to output
+// Will allow playing by allowing writes to output
 func (m *Mixer) Play() {
 	m.playLock.Unlock()
 }
 
-// Will toggle playing by preventing writes to output
+// Will stop playing by preventing writes to output
 // TODO: FiX THIS. BORKED AS HELL https://github.com/VivaLaPanda/uta-stream/issues/3
 // If people keep calling pause then it will keep spawning deadlocked routines
 // until someone hits play, at which point all extra paused routines will die
@@ -112,7 +128,7 @@ func (m *Mixer) Pause() {
 	}()
 }
 
-// Will go to queue and get the next track
+// Will go to queue and get the next track and associated metadata
 func (m *Mixer) fetchNextSong() (nextSongChan *chan []byte, nextSongPath string, isEmpty bool, fromAuto bool) {
 	nextSongPath, nextSongReader, isEmpty, fromAuto := m.queue.Pop()
 	var err error

@@ -1,3 +1,5 @@
+// Package queue provides components to manage a queue of songs in a variety of formats
+// and provide them as readable resources to consumers.
 package queue
 
 import (
@@ -17,7 +19,9 @@ type Queue struct {
 	AutoqEnabled bool
 }
 
-// Make a new q structure. allowChainbreak will make the autoq more random
+// NeqQueue will return a queue structure with the provided autoq engine and cache
+// attached. enableAutoq will determine whether a Pop will attempt to fetch
+// from the autoq.
 func NewQueue(aqEngine *auto.AQEngine, cache *cache.Cache, enableAutoq bool) *Queue {
 	return &Queue{
 		lock:         &sync.Mutex{},
@@ -26,7 +30,7 @@ func NewQueue(aqEngine *auto.AQEngine, cache *cache.Cache, enableAutoq bool) *Qu
 		cache:        cache}
 }
 
-// Returns the audio resource next in the queue
+// Pop returns the audio resource next in the queue along with state flags.
 func (q *Queue) Pop() (ipfsPath string, songReader io.Reader, emptyq bool, fromAuto bool) {
 	// If there is nothing to queue and we have autoq enabled,
 	// get from autoq. If autoq gives us an empty string (no audio to play)
@@ -40,6 +44,8 @@ func (q *Queue) Pop() (ipfsPath string, songReader io.Reader, emptyq bool, fromA
 				return "", nil, true, fromAuto
 			}
 
+			// TODO: If resource is IPFS but can't be fetched this blocks, effectivelly
+			// killing the server. Fix this.
 			ipfsPath, songReader, err := q.cache.HardResolve(ipfsPath)
 			if err != nil {
 				log.Printf("Issue when resolving resource from AutoQ. Err: %v\n", err)
@@ -69,6 +75,8 @@ func (q *Queue) Pop() (ipfsPath string, songReader io.Reader, emptyq bool, fromA
 	return ipfsPath, songReader, false, fromAuto
 }
 
+// IsEmpty returns a boolean indicating whether the queue should be considered empty
+// given the state of the real queue and autoq
 func (q *Queue) IsEmpty() bool {
 	if len(q.fifo) == 0 {
 		if !q.AutoqEnabled {
@@ -93,17 +101,20 @@ func (q *Queue) PlayNext(ipfsPath string) {
 	q.lock.Unlock()
 }
 
-// Remove all items from the queue. Will not dump the encoder (current and next song)
+// Remove all items from the queue. Will not dump the encoder (current song)
 func (q *Queue) Dump() {
 	q.lock.Lock()
 	q.fifo = make([]string, 0)
 	q.lock.Unlock()
 }
 
+// Length returns the length of the real queue
 func (q *Queue) Length() int {
 	return len(q.fifo)
 }
 
+// Get queue returns a copy of the real queue, and while it does so
+// attempts to resolve any placeholders
 func (q *Queue) GetQueue() []string {
 	// Go through the queue and try to resolve any placeholders
 	q.lock.Lock()
@@ -138,8 +149,10 @@ func remove(s []string, i int) []string {
 	return s[:len(s)-1]
 }
 
-// Used as a gateway to let the autoq know a song was played. For training the
-// qutoqueue
-func (q *Queue) NotifyDone(ipfsPath string) {
-	q.autoq.NotifyPlayed(ipfsPath)
+// Used as a gateway to let the autoq know a song was played.
+// learnFrom being false indicates you want to let the autoq know you finished
+// the last song (so it doesn't suggest it again), but you *don't* want to train it
+// off what you just finished
+func (q *Queue) NotifyDone(ipfsPath string, learnFrom bool) {
+	q.autoq.NotifyPlayed(ipfsPath, learnFrom)
 }
