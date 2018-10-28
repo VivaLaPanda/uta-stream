@@ -53,6 +53,7 @@ func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, info *metadata.Cac
 	baseRouter := mux.NewRouter()
 	router := baseRouter.PathPrefix(basePath).Subrouter()
 	router.Use(amw.Middleware)
+	router.Use(headerMiddleware)
 	router.Handle("/", index()).
 		Methods("GET")
 	router.Handle("/enqueue", queuer(q, c, info, q.AddToQueue)).
@@ -116,7 +117,6 @@ func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, info *metadata.Cac
 // notFound is the function in charge of responding to 404s
 func notFound(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	fmt.Fprintln(w, "{\"error\":\"Endpoint not found. Doublecheck your query or take a look at the"+
 		"docs: https://github.com/VivaLaPanda/uta-stream\"}")
 }
@@ -138,7 +138,6 @@ func index() http.Handler {
 // queueing of cached resource, or of a placeholder to be swapped once we are done with the DL
 func queuer(q *queue.Queue, c *cache.Cache, info *metadata.Cache, qFunc QFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		resourceToQueue := r.URL.Query().Get("song")
 		if resourceToQueue == "" {
 			w.WriteHeader(http.StatusBadRequest)
@@ -175,7 +174,6 @@ func queuer(q *queue.Queue, c *cache.Cache, info *metadata.Cache, qFunc QFunc) h
 // skip will skip the currently playing song. Expect some delay
 func skip(e *mixer.Mixer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
 		// Encoder is in charge of skipping, not the queue
 		// Kinda weird, but it was the best way to reduce component interdependency
@@ -187,7 +185,6 @@ func skip(e *mixer.Mixer) http.Handler {
 
 func play(e *mixer.Mixer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		e.Play()
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "{\"message\":\"state changed to played successfully\"}")
@@ -196,7 +193,6 @@ func play(e *mixer.Mixer) http.Handler {
 
 func pause(e *mixer.Mixer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
 		e.Pause()
 		w.WriteHeader(http.StatusOK)
@@ -206,7 +202,6 @@ func pause(e *mixer.Mixer) http.Handler {
 
 func playing(m *mixer.Mixer, q *queue.Queue, info *metadata.Cache) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
 		// Note that these string cats are less expensive than they look
 		// Go's compiler optimzes them pretty well
@@ -267,4 +262,14 @@ func tracing(nextRequestID func() string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func headerMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add headers to all responses
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		next.ServeHTTP(w, r)
+	})
 }

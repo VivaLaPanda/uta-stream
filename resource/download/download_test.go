@@ -41,6 +41,7 @@ func TestDownloadYoutube(t *testing.T) {
 	rawUrl := "https://youtu.be/nAwTw1aYy6M"
 	ipfsUrl := "localhost:5001"
 	expectedIpfsHash := "/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf"
+	alternativeExpected := "/ipfs/QmRJWABEnLWqi3dE4JwdiwRSSdukFKQf3Xmn19Y7Ws2jvd"
 
 	// Setup shell and testing url
 	sh := shell.NewShell(ipfsUrl)
@@ -49,24 +50,20 @@ func TestDownloadYoutube(t *testing.T) {
 		t.Errorf("TestDownloadYoutube failed to parse the test url: %v", err)
 	}
 
-	// Setup file for streamData
-	outputFile, _ := os.Create("test_split.mp3.test")
-	defer outputFile.Close()
-
 	metadata := metadata.NewCache("metadata.db.test")
 
 	// Commence the download
-	ipfsPath, err := downloadYoutube(*urlToDL, sh, metadata, outputFile)
+	ipfsPath, err := downloadYoutube(*urlToDL, sh, metadata, nil)
 	if err != nil {
 		t.Errorf("TestDownloadYoutube failed due to an error: %v", err)
 	}
-	if ipfsPath != expectedIpfsHash {
+	if ipfsPath != expectedIpfsHash && ipfsPath != alternativeExpected {
 		t.Errorf("TestDownloadYoutube failed. \nExpected hash:%v\nActual hash:%v\n", expectedIpfsHash, ipfsPath)
 	}
 }
 
 func TestDownload(t *testing.T) {
-	rawUrl := "https://www.youtube.com/watch?v=WKzG9R-AxpE&feature=youtu.be"
+	rawUrl := "https://www.youtube.com/watch?v=nAwTw1aYy6M&feature=youtu.be"
 	ipfsUrl := "localhost:5001"
 
 	// Setup shell and testing url
