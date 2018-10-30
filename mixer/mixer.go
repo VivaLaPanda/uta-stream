@@ -59,6 +59,8 @@ func NewMixer(queue *queue.Queue, packetsPerSecond int) *Mixer {
 				mixer.playLock.Unlock()
 				mixer.Output <- broadcastPacket
 			}
+			// Send an empty byte so the consumer can determine the song ended
+			mixer.Output <- make([]byte, 0)
 
 			// We couldn't play from current, assume that the song ended
 			// Also, if we just recieved a skip, then we don't want to use that
@@ -76,12 +78,6 @@ func NewMixer(queue *queue.Queue, packetsPerSecond int) *Mixer {
 				mixer.currentSong = tempSong
 				mixer.CurrentSongPath = tempPath
 				broadcastPacket := <-*mixer.currentSong
-				mixer.Output <- broadcastPacket
-
-				// We dupliacte the send here because going around the loop tends to
-				// introduce a slight delay. This buffers us a little. Shouldn't be a desync
-				// issue unless you listen for a *long* time
-				broadcastPacket = <-*mixer.currentSong
 				mixer.Output <- broadcastPacket
 			} else {
 				time.Sleep(2 * time.Second)
