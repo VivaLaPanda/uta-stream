@@ -99,13 +99,20 @@ func ServeAudioOverHttp(inputAudio <-chan []byte, packetsPerSecond int, port int
 	// Listen to incoming audio bytes and push them out to all consumers
 	// If a consumer is blocking, just ignore it and keep going
 	go func() {
+		catchupFrames := 0
 		for audioBytes := range inputAudio {
-			// An empty signal from inputAudio indicates the end of a track. Don't Sleep
-			// and instead grab the next packet right away
-			if len(audioBytes) != 0 {
-				time.Sleep(time.Duration(1000/packetsPerSecond) * time.Millisecond)
-			} else {
+			// An empty signal from inputAudio indicates the end of a track.
+			// indicate that we need to play faster than normal to catch up
+			if len(audioBytes) == 0 {
+				catchupFrames += 1
 				audioBytes = <-inputAudio
+				continue
+			}
+
+			if catchupFrames > 0 {
+				catchupFrames -= 1
+			} else {
+				time.Sleep(time.Duration(1000/packetsPerSecond) * time.Millisecond)
 			}
 
 			for _, consumer := range consumers {

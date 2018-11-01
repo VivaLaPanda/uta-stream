@@ -32,7 +32,7 @@ Implemented:
 * Resource cache
 * Downloaders
     - youtube
-    - ipfsxx
+    - ipfs
 * API
 * Permissions (Key-based)
 * Song info cache (ipfsHash -> Title/etc.)
