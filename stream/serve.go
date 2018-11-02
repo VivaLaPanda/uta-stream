@@ -111,7 +111,7 @@ func ServeAudioOverHttp(inputAudio <-chan []byte, packetsPerSecond int, port int
 		for audioBytes := range inputAudio {
 			// An empty signal from inputAudio indicates the end of a track.
 			// indicate that we need to play faster than normal to catch up
-			if len(audioBytes) == 0 {
+			if len(audioBytes) < 1 {
 				catchupFrames += 1
 				audioBytes = <-inputAudio
 				continue

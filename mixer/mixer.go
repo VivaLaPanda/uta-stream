@@ -37,7 +37,7 @@ type Mixer struct {
 func NewMixer(queue *queue.Queue, packetsPerSecond int) *Mixer {
 	currentSong := make(chan []byte, 1)
 	mixer := &Mixer{
-		Output:           make(chan []byte, 3), // Needs to have space to handle song transition
+		Output:           make(chan []byte, 8), // Needs to have space to handle song transition
 		packetsPerSecond: packetsPerSecond,
 		currentSong:      &currentSong,
 		queue:            queue,

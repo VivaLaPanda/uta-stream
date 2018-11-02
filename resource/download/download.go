@@ -80,6 +80,8 @@ func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, metadata *metadata.Cach
 		return "", err
 	}
 
+	dlError := false
+
 	// Download the mp4
 	var dlDone sync.WaitGroup
 	dlDone.Add(1)
@@ -88,6 +90,7 @@ func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, metadata *metadata.Cach
 		err = vidInfo.Download(bestFormat, convInput)
 		if err != nil {
 			log.Printf("ytdl encountered an error: %v\n", err)
+			dlError = true
 		}
 		log.Printf("Downloading of %v complete\n", urlToDL.EscapedPath())
 		convInput.Close()
@@ -126,6 +129,10 @@ func downloadYoutube(urlToDL url.URL, ipfs *shell.Shell, metadata *metadata.Cach
 	// Wait until everything is done
 	dlDone.Wait()
 	convProgress.Wait()
+
+	if dlError {
+		return "", fmt.Errorf("failed to download %s, check log", vidInfo.Title)
+	}
 
 	// Add to ipfs
 	ipfsPath, err = addToIpfs(fileLocation, ipfs)

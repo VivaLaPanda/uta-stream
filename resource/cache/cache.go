@@ -163,6 +163,8 @@ func (c *Cache) UrlCacheLookup(url string) (resourceID string, err error) {
 			ipfsPath, err := download.Download(url, c.ipfs, c.metadata, hotWriter)
 			if err != nil {
 				log.Printf("failed to DL requested resource: %v\nerr:%v", url, err)
+				delete(c.Placeholders, url)
+				return
 			}
 			// Register that we're done with the DL
 			<-activeDownloads
@@ -185,10 +187,12 @@ func (c *Cache) UrlCacheLookup(url string) (resourceID string, err error) {
 // Fetch IPFS will get the provided IPFS resource and return the reader of its
 // data
 func (c *Cache) FetchIpfs(ipfsPath string) (r io.ReadCloser, err error) {
-	err = c.ipfs.Pin(ipfsPath) // Any time we fetch we also pin. This goes away eventually
-	if err != nil {
-		return nil, err
-	}
+	go func() {
+		err := c.ipfs.Pin(ipfsPath) // Any time we fetch we also pin. This goes away eventually
+		if err != nil {
+			log.Printf("Failed to pin IPFS path! %v may not play later\n", err)
+		}
+	}()
 
 	return c.ipfs.Cat(ipfsPath)
 }
