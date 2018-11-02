@@ -70,6 +70,7 @@ func generateNewStream(w http.ResponseWriter, req *http.Request) {
 	for bytesToStream := range mediaConsumer {
 		_, err = w.Write(bytesToStream)
 		if err != nil {
+			_, err = w.Write(bytesToStream) // Retry once
 			errString := fmt.Sprintf("Copying audio data into response failed: %v", err)
 			log.Fatalf(errString)
 			http.Error(w, errString, 500)
