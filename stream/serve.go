@@ -18,6 +18,10 @@ var consumerWLock = sync.Mutex{}
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
+// catchupFrameIncrement accounts for the fact that fetching the next song may have
+// introduced a delay by speeding up serving right when a song starts
+var catchupFrameIncrement = 1
+
 // Seed the random generator
 func init() {
 	rand.Seed(time.Now().UnixNano())
@@ -56,6 +60,10 @@ func generateNewStream(w http.ResponseWriter, req *http.Request) {
 		<-notify
 		killConsumer <- consumerID
 	}()
+
+	for len(mediaConsumer) < 10 {
+		time.Sleep(1 * time.Second)
+	}
 
 	// Recive bytes from the channel and respond with them
 	var err error
