@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/VivaLaPanda/uta-stream/resource/placeholders"
+	"github.com/VivaLaPanda/uta-stream/resource"
 	shell "github.com/ipfs/go-ipfs-api"
 	"github.com/rylio/ytdl"
 )
@@ -23,37 +23,36 @@ var tempDLFolder = "TEMP-DL"
 // without waiting for the DL to finish. If you pass a writer the data will be
 // pushed into that reader at the same time it's written to disk. I recommend
 // a buffered reader, as I'm using TeeReader which works best with buffers
-func Download(request Song, pHolders *placeholders.List, ipfs *shell.Shell) (result Song, err error) {
+func Download(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error) {
 	// Ensure the temporary directory for storing downloads exists
-	if _, err = os.Stat(tempDLFolder); os.IsNotExist(err) {
+	if _, err := os.Stat(tempDLFolder); os.IsNotExist(err) {
 		os.Mkdir(tempDLFolder, os.ModePerm)
 	}
 
 	// Route to different handlers based on hostname
-	switch request.url.Hostname() {
+	switch song.Url().Hostname() {
 	case "youtu.be":
-		return downloadYoutube(request, pHolders, ipfs)
+		return downloadYoutube(song, ipfs)
 	default:
-		return "", fmt.Errorf("URL hostname (%v) doesn't match a known provider.\n"+
-			"Should be one of: %v\n", request.url.Hostname(), knownProviders)
+		return song, fmt.Errorf("URL hostname (%v) doesn't match a known provider.\n"+
+			"Should be one of: %v\n", song.Url().Hostname(), knownProviders)
 	}
 }
 
-func downloadYoutube(request Song, pHolders *placeholders.List, ipfs *shell.Shell) (result Song, err error) {
+func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error) {
 	// Get the info for the video
-	var vidInfo *ytdl.VideoInfo
-	vidInfo, err = ytdl.GetVideoInfoFromShortURL(Song.url)
+	vidInfo, err := ytdl.GetVideoInfoFromShortURL(song.Url())
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch provided Youtube url. Err: %v", err)
+		return song, fmt.Errorf("failed to fetch provided Youtube url. Err: %v", err)
 	}
 
 	// Figure out the highest bitrate format
 	formats := vidInfo.Formats
 	bestFormat := formats.Best(ytdl.FormatAudioBitrateKey)[0] // Format with highest bitrate
 
-	// Add metadata to Song
-	request.Title = vidInfo.Title
-	request.Duration = vidInfo.Duration
+	// Add metadata to resource.Song
+	song.Title = vidInfo.Title
+	song.Duration = vidInfo.Duration
 
 	// NOTE: The following gets a little confusing because of the io piping
 	// the mp3 is being downloaded into a writer. That writer was provided by
@@ -64,7 +63,7 @@ func downloadYoutube(request Song, pHolders *placeholders.List, ipfs *shell.Shel
 	// Prepare the converter
 	convInput, convOutput, convProgress, err := splitAudio()
 	if err != nil {
-		return nil, err
+		return song, err
 	}
 
 	// Prepare the mp3 file we'll write to
@@ -72,94 +71,84 @@ func downloadYoutube(request Song, pHolders *placeholders.List, ipfs *shell.Shel
 	_ = os.MkdirAll(filepath.Dir(fileLocation), os.ModePerm)
 	mp3File, err := os.Create(fileLocation)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create mp3 file. Err: %v", err)
+		return song, fmt.Errorf("failed to create mp3 file. Err: %v", err)
 	}
-
-	// Create placeholder
-	newPlaceholder, hotWriter := pHolders.AddPlaceholder(request.url.String())
 
 	// Download the mp4 into the converter
 	dlError := make(chan error)
 	go func() {
-		log.Printf("Downloading mp4 from %v\n", request.url.String())
+		log.Printf("Downloading mp4 from %v\n", song.Url().String())
 		err = vidInfo.Download(bestFormat, convInput)
 		defer convInput.Close()
 		if err != nil {
 			dlError <- fmt.Errorf("ytdl encountered an error: %v\n", err)
 			return
 		}
-		log.Printf("Downloading of %v complete\n", request.url.String())
+		log.Printf("Downloading of %v complete\n", song.Url().String())
 		dlError <- nil
 	}()
 
 	// Read from converter and write to the file and potentially the provided hotWriter
 	go func() {
-		log.Printf("Converting %s mp4 to mp3\n", request.url.String())
+		log.Printf("Converting %s mp4 to mp3\n", song.Url().String())
 		var sharedReader io.Reader
-		if hotWriter != nil {
-			bufStreamData := bufio.NewWriter(hotWriter)
+		bufStreamData := bufio.NewWriter(song.Writer)
+		if song.Writer != nil {
 			sharedReader = io.TeeReader(convOutput, bufStreamData)
 		} else {
 			sharedReader = convOutput
 		}
 
 		io.Copy(mp3File, sharedReader)
-		log.Printf("Conversion of %s to mp3 complete\n", request.url.String())
+		log.Printf("Conversion of %s to mp3 complete\n", song.Url().String())
 		convOutput.Close()
-		if hotWriter != nil {
+		if song.Writer != nil {
 			bufStreamData.Flush()
-			hotWriter.Close()
+			song.Writer.Close()
 		}
 		mp3File.Close()
 	}()
 
 	// Place into IPFS and resolve the placeholder
 	go func() {
-		// Wait until everything is done
-		convProgress.Wait()
+		// BLock until DL finishes, nil for success, else will be an error
 		err := <-dlError
-
-		if err {
-			pHolders.RemovePlaceholder(request.url.String())
-			return "", fmt.Errorf("failed to download %s. Err: %v", request.url.String(), err)
+		if err != nil {
+			song.DLFailure <- fmt.Errorf("failed to download %s. Err: %v\n", song.Url().String(), err)
+			return
 		}
+
+		// Wait for convert to finish
+		convProgress.Wait()
 
 		// Add to ipfs
-		ipfsPath, err = addToIpfs(fileLocation, ipfs)
+		ipfsPath, err := addToIpfs(fileLocation, ipfs)
 		if err != nil {
-			pHolders.RemovePlaceholder(request.url.String())
-			return "", err
+			song.DLFailure <- fmt.Errorf("failed to add %s to IPFS. Err: %v\n", song.Url().String(), err)
+			return
 		}
-
-		// Put result into the placeholder
-		newPlaceholder.ipfsPath <- ipfsPath
+		song.DLResult <- ipfsPath
 
 		// Remove the mp3 now that we've added
 		if err = os.Remove(fileLocation); err != nil {
-			log.Printf("Failed to remove mp3 for %s. Err: %v\n", request.url.String(), err)
+			log.Printf("Failed to remove mp3 for %s. Err: %v\n", song.Url().String(), err)
 		}
 	}()
 
-	return request, nil
-}
-
-func IsIpfs(resourceID string) bool {
-	if len(resourceID) >= 6 && resourceID[:6] == "/ipfs/" {
-		return true
-	}
+	return song, nil
 }
 
 // Fetch IPFS will get the provided IPFS resource and return the reader of its
 // data
-func FetchIpfs(ipfsPath string, ipsf *shell.Shell) (r io.ReadCloser, err error) {
+func FetchIpfs(ipfsPath string, ipfs *shell.Shell) (r io.ReadCloser, err error) {
 	go func() {
-		err := c.ipfs.Pin(ipfsPath) // Any time we fetch we also pin. This goes away eventually
+		err := ipfs.Pin(ipfsPath) // Any time we fetch we also pin. This goes away eventually
 		if err != nil {
 			log.Printf("Failed to pin IPFS path! %v may not play later\n", err)
 		}
 	}()
 
-	return c.ipfs.Cat(ipfsPath)
+	return ipfs.Cat(ipfsPath)
 }
 
 // Add the file at the provided location to ipfs and return its IPFS

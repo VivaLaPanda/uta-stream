@@ -21,7 +21,14 @@ type List struct {
 
 type placeholder struct {
 	reader   io.Reader
-	ipfsPath chan string
+	IpfsPath chan string
+}
+
+func NewList(activeDownloads int) *List {
+	return &List{
+		Placeholders:    make(map[string]*placeholder),
+		activeDownloads: make(chan bool, activeDownloads),
+	}
 }
 
 func (l *List) AddPlaceholder(url string) (newPlaceholder *placeholder, hotWriter io.WriteCloser) {
@@ -43,7 +50,7 @@ func (l *List) RemovePlaceholder(url string) {
 
 // HardResolve will take the url and check it against the Placeholders
 // it ensures that you will always get a reader, blocking if necessary
-func (l *List) HardResolve(resourceID string) (ipfsPath string, hotReader io.Reader, err error) {
+func (l *List) HardResolve(resourceID string) (IpfsPath string, hotReader io.Reader, err error) {
 	if isIpfs(resourceID) {
 		return resourceID, nil, nil
 	}
@@ -59,20 +66,20 @@ func (l *List) HardResolve(resourceID string) (ipfsPath string, hotReader io.Rea
 	// we just have to block until we're done with the DL/Conversion
 	if pHolder.reader == nil {
 		// Block until the placeholder is done processing
-		return <-pHolder.ipfsPath, nil, nil
+		return <-pHolder.IpfsPath, nil, nil
 	}
 
 	select {
-	case ipfsPath = <-pHolder.ipfsPath:
+	case IpfsPath = <-pHolder.IpfsPath:
 	default:
-		ipfsPath = ""
+		IpfsPath = ""
 	}
 
 	// We have a Reader, just go off that
-	return ipfsPath, pHolder.reader, nil
+	return IpfsPath, pHolder.reader, nil
 }
 
-func (l *List) SoftResolve(resourceID string) (ipfsPath string, err error) {
+func (l *List) SoftResolve(resourceID string) (IpfsPath string, err error) {
 	if isIpfs(resourceID) {
 		return resourceID, nil
 	}
@@ -82,14 +89,14 @@ func (l *List) SoftResolve(resourceID string) (ipfsPath string, err error) {
 	}
 
 	select {
-	case ipfsPath = <-pHolder.ipfsPath:
+	case IpfsPath = <-pHolder.IpfsPath:
 		// If we're resolving something it should no longer be held as a placeholder
 		defer delete(l.Placeholders, resourceID)
 	default:
-		ipfsPath = ""
+		IpfsPath = ""
 	}
 
-	return ipfsPath, nil
+	return IpfsPath, nil
 }
 
 func isIpfs(resourceID string) bool {
