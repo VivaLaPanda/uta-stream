@@ -91,7 +91,7 @@ func (c *Cache) Load(filename string) error {
 
 // UrlCacheLookup will check the cache for the provided url, but on a cache miss
 // it will download the resource and add it to the cache, then return the hash
-func (c *Cache) Lookup(resourceID string, urgent bool) (song *resource.Song, err error) {
+func (c *Cache) Lookup(resourceID string, urgent bool, noDownload bool) (song *resource.Song, err error) {
 	song, err = resource.NewSong(resourceID, urgent)
 	if err != nil {
 		return nil, err
@@ -108,9 +108,11 @@ func (c *Cache) Lookup(resourceID string, urgent bool) (song *resource.Song, err
 		cachedSong, exists := (*c.songMap)[url]
 
 		if !exists {
-			song, err = download.Download(song, c.ipfs)
-			(*c.songMap)[url] = song
-			c.Write(c.cacheFilename)
+			if !noDownload {
+				song, err = download.Download(song, c.ipfs)
+				(*c.songMap)[url] = song
+				c.Write(c.cacheFilename)
+			}
 		} else {
 			song = cachedSong
 		}

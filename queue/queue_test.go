@@ -6,7 +6,6 @@ import (
 
 	"github.com/VivaLaPanda/uta-stream/queue/auto"
 	"github.com/VivaLaPanda/uta-stream/resource/cache"
-	"github.com/VivaLaPanda/uta-stream/resource/metadata"
 )
 
 func cleanup(file string) {
@@ -26,11 +25,10 @@ var (
 
 func TestPop(t *testing.T) {
 	autoqTestfile := "autoqTestPop.test"
+	ipfsUrl := "localhost:5001"
 	// Make sure the q starts empty
 	a := auto.NewAQEngine(autoqTestfile, 0, 1)
-	info := metadata.NewCache(metadataCacheFile)
-	c := cache.NewCache(cacheFile, info, "localhost:5001")
-	q := NewQueue(a, c, false)
+	q := NewQueue(a, c, false, ipfsUrl)
 	song, _, isEmpty, _ := q.Pop()
 	if isEmpty == false {
 		t.Errorf("Queue didn't start empty. isEmpty was false.\n")

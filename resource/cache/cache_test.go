@@ -61,19 +61,19 @@ func TestLookup(t *testing.T) {
 	ipfs := shell.NewShell(ipfsUrl)
 
 	// Lookup the url, the result shouldn't be able to find the IPFS url right away
-	song, _ := c.Lookup(testUrl, false)
+	song, _ := c.Lookup(testUrl, false, false)
 	if resourceID, isCached := song.ResourceID(); resourceID != testUrl || isCached != false {
 		t.Errorf("cache lookup resulted in incorrect resourceID")
 	}
 
 	// Block until we're done with the DL
 	_, _ = song.Resolve(ipfs)
-	song, _ = c.Lookup(testUrl, false)
+	song, _ = c.Lookup(testUrl, false, false)
 	if resourceID, isCached := song.ResourceID(); resourceID != testIpfsPath || isCached != true {
 		t.Errorf("cache didn't find url even after it should have stored")
 	}
 
-	song, _ = c.Lookup(testIpfsPath, false)
+	song, _ = c.Lookup(testIpfsPath, false, false)
 	if resourceID, isCached := song.ResourceID(); resourceID != testIpfsPath || isCached != true {
 		t.Errorf("cache lookup resulted in incorrect resourceID")
 	}

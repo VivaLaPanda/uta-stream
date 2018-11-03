@@ -99,6 +99,15 @@ func (s *Song) Resolve(ipfs *shell.Shell) (reader io.ReadCloser, err error) {
 	}
 }
 
+func (s *Song) CheckFailure() (err error) {
+	select {
+	case err = <-s.DLFailure:
+		return err
+	default:
+		return nil
+	}
+}
+
 func IsIpfs(resourceID string) bool {
 	return len(resourceID) >= 6 && resourceID[:6] == "/ipfs/"
 }
