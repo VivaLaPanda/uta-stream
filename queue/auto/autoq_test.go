@@ -100,7 +100,7 @@ func TestVpop(t *testing.T) {
 
 	// Since the last song was a b, the next should be an a
 	song, _ := q.Vpop()
-	songPath, _ := song.ResourceID()
+	songPath := song.ResourceID()
 	if songPath != "test_a" {
 		t.Errorf("Autoq produced unexpected song (expected != actual). %v != %v", "test_a", song)
 	}
@@ -110,7 +110,7 @@ func TestVpop(t *testing.T) {
 	time.Sleep(1)
 	song, _ = q.Vpop()
 
-	songPath, _ = song.ResourceID()
+	songPath = song.ResourceID()
 	if songPath != "test_b" {
 		t.Errorf("Autoq produced unexpected song (expected != actual). %v != %v", "test_b", song)
 	}

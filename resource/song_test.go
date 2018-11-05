@@ -30,7 +30,8 @@ func TestNewSong(t *testing.T) {
 func TestResourceID(t *testing.T) {
 	rawUrl := "https://youtu.be/nAwTw1aYy6M"
 	song, _ := NewSong(rawUrl, false)
-	resourceID, isCached := song.ResourceID()
+	resourceID := song.ResourceID()
+	isCached := IsIpfs(resourceID)
 	if resourceID != rawUrl {
 		t.Errorf("Expected resourceID didn't match actua. E:%s, A:%s", rawUrl, resourceID)
 	}
@@ -43,7 +44,8 @@ func TestResourceID(t *testing.T) {
 
 	expectedIpfs := "/ipfs/QmRRKwCPfmAf8A9crYCisfFuSDbwerthf5NBQ2h334vQsb"
 	song.DLResult <- expectedIpfs
-	resourceID, isCached = song.ResourceID()
+	resourceID = song.ResourceID()
+	isCached = IsIpfs(resourceID)
 	if resourceID != expectedIpfs {
 		t.Errorf("Expected resourceID didn't match actua. E:%s, A:%s", expectedIpfs, resourceID)
 	}

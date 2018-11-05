@@ -51,10 +51,10 @@ func NewSong(resourceID string, hotwriter bool) (song *Song, err error) {
 	return song, nil
 }
 
-func (s *Song) ResourceID() (resourceID string, isCached bool) {
+func (s *Song) ResourceID() (resourceID string) {
 	// If we have the IPFS path fetch it right away
 	if s.ipfsPath != "" {
-		return s.ipfsPath, true
+		return s.ipfsPath
 	}
 
 	// Check to see if a download we were wairing on finished, if so
@@ -62,9 +62,9 @@ func (s *Song) ResourceID() (resourceID string, isCached bool) {
 	select {
 	case resourceID = <-s.DLResult:
 		s.ipfsPath = resourceID
-		return resourceID, true
+		return resourceID
 	default:
-		return s.url.String(), false
+		return s.url.String()
 	}
 }
 
