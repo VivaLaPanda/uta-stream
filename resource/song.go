@@ -68,6 +68,10 @@ func (s *Song) ResourceID() (resourceID string, isCached bool) {
 	}
 }
 
+func (s *Song) IpfsPath() string {
+	return s.ipfsPath
+}
+
 func (s *Song) Url() *url.URL {
 	return s.url
 }

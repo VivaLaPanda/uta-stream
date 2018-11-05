@@ -9,7 +9,6 @@ import (
 
 	"github.com/VivaLaPanda/uta-stream/queue/auto"
 	"github.com/VivaLaPanda/uta-stream/resource"
-	"github.com/VivaLaPanda/uta-stream/resource/cache"
 
 	shell "github.com/ipfs/go-ipfs-api"
 )
@@ -18,7 +17,6 @@ type Queue struct {
 	fifo         []*resource.Song
 	lock         *sync.Mutex
 	autoq        *auto.AQEngine
-	cache        *cache.Cache
 	ipfs         *shell.Shell
 	AutoqEnabled bool
 }
@@ -26,12 +24,11 @@ type Queue struct {
 // NeqQueue will return a queue structure with the provided autoq engine and cache
 // attached. enableAutoq will determine whether a Pop will attempt to fetch
 // from the autoq.
-func NewQueue(aqEngine *auto.AQEngine, cache *cache.Cache, enableAutoq bool, ipfsUrl string) *Queue {
+func NewQueue(aqEngine *auto.AQEngine, enableAutoq bool, ipfsUrl string) *Queue {
 	return &Queue{
 		lock:         &sync.Mutex{},
 		autoq:        aqEngine,
 		AutoqEnabled: enableAutoq,
-		cache:        cache,
 		ipfs:         shell.NewShell(ipfsUrl),
 	}
 }
@@ -45,18 +42,13 @@ func (q *Queue) Pop() (song *resource.Song, songReader io.Reader, emptyq bool, f
 	if len(q.fifo) == 0 {
 		if q.AutoqEnabled {
 			fromAuto = true
-			ipfsPath := q.autoq.Vpop()
-			if ipfsPath == "" {
+			song, err := q.autoq.Vpop()
+			if err != nil {
 				return nil, nil, true, fromAuto
 			}
 
 			// TODO: If resource is IPFS but can't be fetched this blocks, effectivelly
 			// killing the server. Fix this.
-			song, err := q.cache.Lookup(ipfsPath, false, true)
-			if err != nil {
-				log.Printf("Issue when looking up song. Err: %v\n", err)
-				return nil, nil, true, fromAuto
-			}
 			songReader, err = song.Resolve(q.ipfs)
 			if err != nil {
 				log.Printf("Issue when resolving song. Err: %v\n", err)
