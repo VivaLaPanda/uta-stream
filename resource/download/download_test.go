@@ -54,9 +54,11 @@ func TestDownloadYoutube(t *testing.T) {
 		t.Errorf("Song title doesn't equal expected. e: %s, a:%s\n", expectedTitle, song.Title)
 	}
 	ipfsPath := <-song.DLResult
-	expectedIPFS := "/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf"
-	if ipfsPath != expectedIPFS {
-		t.Errorf("IPFS path doesn't equal expected. e: %s, a:%s\n", expectedIPFS, ipfsPath)
+	expectedPaths := make(map[string]bool)
+	expectedPaths["/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf"] = true
+	expectedPaths["/ipfs/QmRJWABEnLWqi3dE4JwdiwRSSdukFKQf3Xmn19Y7Ws2jvd"] = true
+	if expectedPaths[ipfsPath] != true {
+		t.Errorf("IPFS path doesn't equal expected. e: %v, a:%s\n", expectedPaths[ipfsPath], ipfsPath)
 	}
 }
 
