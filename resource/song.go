@@ -1,6 +1,7 @@
 package resource
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/url"
@@ -14,7 +15,7 @@ import (
 var bufferSize int64 = 10000 //kb
 
 type Song struct {
-	ipfsPath  string
+	ipfsPath  string `json:"currentSong"`
 	url       *url.URL
 	Title     string
 	Duration  time.Duration
@@ -36,11 +37,11 @@ func NewSong(resourceID string, hotwriter bool) (song *Song, err error) {
 
 	if IsIpfs(resourceID) {
 		song.ipfsPath = resourceID
-	}
-
-	song.url, err = url.Parse(resourceID)
-	if err != nil {
-		return nil, fmt.Errorf("ResourceID can't be used to make song. Err: %s", err)
+	} else {
+		song.url, err = url.Parse(resourceID)
+		if err != nil {
+			return nil, fmt.Errorf("ResourceID can't be used to make song. Err: %s", err)
+		}
 	}
 
 	if hotwriter {
@@ -49,6 +50,49 @@ func NewSong(resourceID string, hotwriter bool) (song *Song, err error) {
 	}
 
 	return song, nil
+}
+
+func (s *Song) MarshalJSON() ([]byte, error) {
+	var rawURL string
+	if s.Url() != nil {
+		rawURL = s.Url().String()
+	} else {
+		rawURL = ""
+	}
+
+	return json.Marshal(&struct {
+		IpfsPath string        `json:"ipfsPath"`
+		Url      string        `json:"url"`
+		Title    string        `json:"title"`
+		Duration time.Duration `json:"duration"`
+	}{
+		IpfsPath: s.IpfsPath(),
+		Url:      rawURL,
+		Title:    s.Title,
+		Duration: s.Duration,
+	})
+}
+
+func (s *Song) UnmarshalJSON(data []byte) error {
+	aux := &struct {
+		IpfsPath string        `json:"ipfsPath"`
+		Url      string        `json:"url"`
+		Title    string        `json:"title"`
+		Duration time.Duration `json:"duration"`
+	}{}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	s.ipfsPath = aux.IpfsPath
+	s.Title = aux.Title
+	s.Duration = aux.Duration
+	var err error
+	if s.url, err = url.Parse(aux.Url); err != nil {
+		s.url = nil
+	}
+
+	return nil
 }
 
 func (s *Song) ResourceID() (resourceID string) {

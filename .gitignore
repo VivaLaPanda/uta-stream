@@ -8,6 +8,7 @@ uta-stream
 
 # Test binary, build with `go test -c`
 *.test
+coverage.txt
 
 # Stuff used for testing, these will be generated on running tests
 test_song.mp3

@@ -3,15 +3,15 @@
 package cache
 
 import (
-	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
 	"os"
 
 	"github.com/VivaLaPanda/uta-stream/resource"
+	"github.com/VivaLaPanda/uta-stream/resource/download"
 	shell "github.com/ipfs/go-ipfs-api"
-	"github.com/vivalapanda/uta-stream/resource/download"
 )
 
 // Cache is a struct which tracks the necessary state to translate
@@ -66,7 +66,8 @@ func (c *Cache) Write(filename string) error {
 	if err != nil {
 		return err
 	}
-	encoder := gob.NewEncoder(cacheFilename)
+
+	encoder := json.NewEncoder(cacheFilename)
 	encoder.Encode(c.songMap)
 
 	return nil
@@ -78,13 +79,12 @@ func (c *Cache) Write(filename string) error {
 func (c *Cache) Load(filename string) error {
 	file, err := os.OpenFile(filename, os.O_RDONLY, 0660)
 	defer file.Close()
-	if err == nil {
-		decoder := gob.NewDecoder(file)
-		err = decoder.Decode(c.songMap)
-	}
 	if err != nil {
 		return err
 	}
+
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(c.songMap)
 
 	return nil
 }

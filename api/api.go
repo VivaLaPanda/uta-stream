@@ -15,14 +15,14 @@ import (
 
 	"github.com/VivaLaPanda/uta-stream/mixer"
 	"github.com/VivaLaPanda/uta-stream/queue"
+	"github.com/VivaLaPanda/uta-stream/resource"
 	"github.com/VivaLaPanda/uta-stream/resource/cache"
-	"github.com/VivaLaPanda/uta-stream/resource/metadata"
 	"github.com/gorilla/mux"
 )
 
 // QFunc describes a function that takes a resource ID and attempts to add it to
 // the queue in some way
-type QFunc func(resourceID string)
+type QFunc func(song *resource.Song)
 
 type key int
 
@@ -38,7 +38,7 @@ var (
 // modifies the state of the server. Several components are passed in and then
 // requests to the API translate into operations against those components
 // This function call will block the caller until the server is killed
-func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, info *metadata.Cache, port int, authCfgFilename string) {
+func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, port int, authCfgFilename string) {
 	logger := log.New(os.Stdout, "http: ", log.LstdFlags)
 	logger.Println("Server is starting...")
 
@@ -56,9 +56,9 @@ func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, info *metadata.Cac
 	router.Use(headerMiddleware)
 	router.Handle("/", index()).
 		Methods("GET")
-	router.Handle("/enqueue", queuer(q, c, info, q.AddToQueue)).
+	router.Handle("/enqueue", queuer(q, c, q.AddToQueue)).
 		Methods("POST")
-	router.Handle("/playnext", queuer(q, c, info, q.PlayNext)).
+	router.Handle("/playnext", queuer(q, c, q.PlayNext)).
 		Methods("POST")
 	router.Handle("/skip", skip(m)).
 		Methods("POST")
@@ -66,7 +66,7 @@ func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, info *metadata.Cac
 		Methods("PUT")
 	router.Handle("/pause", pause(m)).
 		Methods("PUT")
-	router.Handle("/playing", playing(m, q, info)).
+	router.Handle("/playing", playing(m, q)).
 		Methods("GET")
 	router.NotFoundHandler = http.HandlerFunc(notFound)
 
@@ -136,7 +136,7 @@ func index() http.Handler {
 // queuer is a function which will handle requests to add a song unto the queue
 // in some way (front of queue, back of queue, etc). Queues may result in immediate
 // queueing of cached resource, or of a placeholder to be swapped once we are done with the DL
-func queuer(q *queue.Queue, c *cache.Cache, info *metadata.Cache, qFunc QFunc) http.Handler {
+func queuer(q *queue.Queue, c *cache.Cache, qFunc QFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resourceToQueue := r.URL.Query().Get("song")
 		if resourceToQueue == "" {
@@ -153,21 +153,17 @@ func queuer(q *queue.Queue, c *cache.Cache, info *metadata.Cache, qFunc QFunc) h
 
 		// If we're looking at an ipfs path just leave as is
 		// Otherwise go and fetch it
-		if resourceToQueue[:6] != "/ipfs/" {
-			var err error
-			resourceToQueue, err = c.UrlCacheLookup(resourceToQueue)
-			if err != nil {
-				log.Printf("Failed to enqueue song, err: %v", err)
-				return
-			}
-			qFunc(resourceToQueue)
+		songToQueue, err := c.Lookup(resourceToQueue, q.IsEmpty(), false)
+		if err != nil {
+			log.Printf("Failed to enqueue song, err: %v", err)
+			return
 		}
-
-		title := info.Lookup(resourceToQueue)
+		qFunc(songToQueue)
 
 		w.WriteHeader(http.StatusOK)
+		jsonData, _ := songToQueue.MarshalJSON()
 		fmt.Fprintf(w, `{"message": "successfully added",
-			               "track":"%s"}`, title)
+			               "track":"%s"}`, jsonData)
 	})
 }
 
@@ -200,7 +196,7 @@ func pause(e *mixer.Mixer) http.Handler {
 	})
 }
 
-func playing(m *mixer.Mixer, q *queue.Queue, info *metadata.Cache) http.Handler {
+func playing(m *mixer.Mixer, q *queue.Queue) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		// Note that these string cats are less expensive than they look
@@ -209,16 +205,13 @@ func playing(m *mixer.Mixer, q *queue.Queue, info *metadata.Cache) http.Handler 
 
 		// Format playing
 		queued := q.GetQueue()
-		for idx, song := range queued {
-			queued[idx] = info.Lookup(song)
-		}
 
 		respStruct := struct {
-			CurrentSong string   `json:"currentSong"`
-			Upcoming    []string `json:"upcoming"`
-			Dj          string   `json:"dj"`
+			CurrentSong *resource.Song   `json:"currentSong"`
+			Upcoming    []*resource.Song `json:"upcoming"`
+			Dj          string           `json:"dj"`
 		}{
-			info.Lookup(m.CurrentSongPath),
+			m.CurrentSongInfo,
 			queued,
 			"",
 		}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/VivaLaPanda/uta-stream/encoder"
 	"github.com/VivaLaPanda/uta-stream/queue"
+	"github.com/VivaLaPanda/uta-stream/resource"
 )
 
 // Mixer is a struct which contains the persistent state necessary to talk
@@ -20,9 +21,9 @@ import (
 type Mixer struct {
 	Output           chan []byte
 	packetsPerSecond int
-	currentSong      *chan []byte
+	currentSongData  *chan []byte
 	queue            *queue.Queue
-	CurrentSongPath  string
+	CurrentSongInfo  *resource.Song
 	playLock         *sync.Mutex
 	learnFrom        bool
 }
@@ -37,11 +38,11 @@ type Mixer struct {
 func NewMixer(queue *queue.Queue, packetsPerSecond int) *Mixer {
 	currentSong := make(chan []byte, 1)
 	mixer := &Mixer{
-		Output:           make(chan []byte, 8), // Needs to have space to handle song transition
+		Output:           make(chan []byte, 16), // Needs to have space to handle song transition
 		packetsPerSecond: packetsPerSecond,
-		currentSong:      &currentSong,
+		currentSongData:  &currentSong,
 		queue:            queue,
-		CurrentSongPath:  "",
+		CurrentSongInfo:  &resource.Song{},
 		playLock:         &sync.Mutex{},
 		learnFrom:        false}
 	close(currentSong)
@@ -49,7 +50,7 @@ func NewMixer(queue *queue.Queue, packetsPerSecond int) *Mixer {
 	// and handle song transitions
 	go func() {
 		for true {
-			for broadcastPacket := range *mixer.currentSong {
+			for broadcastPacket := range *mixer.currentSongData {
 				// We can succesfully read from the current song, all is good
 
 				// This lock is used to remotely pause here if necessary.
@@ -65,8 +66,8 @@ func NewMixer(queue *queue.Queue, packetsPerSecond int) *Mixer {
 			// We couldn't play from current, assume that the song ended
 			// Also, if we just recieved a skip, then we don't want to use that
 			// song to train qutoq
-			if mixer.CurrentSongPath != "" {
-				mixer.queue.NotifyDone(mixer.CurrentSongPath, mixer.learnFrom)
+			if mixer.CurrentSongInfo.IpfsPath() != "" {
+				mixer.queue.NotifyDone(mixer.CurrentSongInfo.IpfsPath(), mixer.learnFrom)
 				mixer.learnFrom = true
 			}
 
@@ -75,9 +76,9 @@ func NewMixer(queue *queue.Queue, packetsPerSecond int) *Mixer {
 			tempSong, tempPath, isEmpty, fromAuto := mixer.fetchNextSong()
 			if !isEmpty && (tempSong != nil) {
 				mixer.learnFrom = !fromAuto
-				mixer.currentSong = tempSong
-				mixer.CurrentSongPath = tempPath
-				broadcastPacket := <-*mixer.currentSong
+				mixer.currentSongData = tempSong
+				mixer.CurrentSongInfo = tempPath
+				broadcastPacket := <-*mixer.currentSongData
 				mixer.Output <- broadcastPacket
 			} else {
 				time.Sleep(2 * time.Second)
@@ -97,7 +98,7 @@ func (m *Mixer) Skip() {
 	}()
 
 	m.learnFrom = false
-	close(*m.currentSong)
+	close(*m.currentSongData)
 }
 
 // Will allow playing by allowing writes to output
@@ -117,19 +118,19 @@ func (m *Mixer) Pause() {
 }
 
 // Will go to queue and get the next track and associated metadata
-func (m *Mixer) fetchNextSong() (nextSongChan *chan []byte, nextSongPath string, isEmpty bool, fromAuto bool) {
-	nextSongPath, nextSongReader, isEmpty, fromAuto := m.queue.Pop()
+func (m *Mixer) fetchNextSong() (nextSongChan *chan []byte, nextSong *resource.Song, isEmpty bool, fromAuto bool) {
+	nextSong, nextSongReader, isEmpty, fromAuto := m.queue.Pop()
 	var err error
 	if isEmpty {
-		return nil, "", true, fromAuto
+		return nil, nextSong, true, fromAuto
 	}
 
 	// Start encoding for broadcast
 	nextSongChan, err = encoder.EncodeMP3(nextSongReader, m.packetsPerSecond)
 	if err != nil {
-		log.Printf("Failed to encode song (%v). Err: %v\n", nextSongPath, err)
-		return nil, "", true, fromAuto
+		log.Printf("Failed to encode song (%v). Err: %v\n", nextSong, err)
+		return nil, nextSong, true, fromAuto
 	}
 
-	return nextSongChan, nextSongPath, false, fromAuto
+	return nextSongChan, nextSong, false, fromAuto
 }

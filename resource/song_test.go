@@ -27,6 +27,24 @@ func TestNewSong(t *testing.T) {
 	}
 }
 
+func TestJson(t *testing.T) {
+	rawUrl := "https://youtu.be/nAwTw1aYy6M"
+	testSongA, _ := NewSong(rawUrl, false)
+
+	json, err := testSongA.MarshalJSON()
+	if err != nil {
+		t.Errorf("failed to marshal JSON. Err: %s", err)
+	}
+	testSongB := &Song{}
+	if err = testSongB.UnmarshalJSON(json); err != nil {
+		t.Errorf("failed to unmarshal JSON. Err: %s", err)
+	}
+
+	if testSongA.Url().String() != testSongB.Url().String() {
+		t.Errorf("url changed after JSON marshal and unmarshal.\n")
+	}
+}
+
 func TestResourceID(t *testing.T) {
 	rawUrl := "https://youtu.be/nAwTw1aYy6M"
 	song, _ := NewSong(rawUrl, false)
@@ -65,7 +83,7 @@ func TestResolve(t *testing.T) {
 	sh := shell.NewShell(ipfsUrl)
 	song, _ := NewSong(rawUrl, false)
 
-	expectedIpfs := "/ipfs/QmRRKwCPfmAf8A9crYCisfFuSDbwerthf5NBQ2h334vQsb"
+	expectedIpfs := "/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf"
 	song.DLResult <- expectedIpfs
 	reader, err := song.Resolve(sh)
 	if reader == nil {

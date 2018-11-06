@@ -54,7 +54,7 @@ func TestDownloadYoutube(t *testing.T) {
 		t.Errorf("Song title doesn't equal expected. e: %s, a:%s\n", expectedTitle, song.Title)
 	}
 	ipfsPath := <-song.DLResult
-	expectedIPFS := "/ipfs/QmRRKwCPfmAf8A9crYCisfFuSDbwerthf5NBQ2h334vQsb"
+	expectedIPFS := "/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf"
 	if ipfsPath != expectedIPFS {
 		t.Errorf("IPFS path doesn't equal expected. e: %s, a:%s\n", expectedIPFS, ipfsPath)
 	}
@@ -62,7 +62,7 @@ func TestDownloadYoutube(t *testing.T) {
 
 func TestFetchIpfs(t *testing.T) {
 	ipfsUrl := "localhost:5001"
-	ipfsPath := "/ipfs/QmRRKwCPfmAf8A9crYCisfFuSDbwerthf5NBQ2h334vQsb"
+	ipfsPath := "/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf"
 
 	// Setup shell and testing url
 	ipfs := shell.NewShell(ipfsUrl)
