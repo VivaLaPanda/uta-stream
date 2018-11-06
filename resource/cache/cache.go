@@ -116,6 +116,13 @@ func (c *Cache) Lookup(resourceID string, urgent bool, noDownload bool) (song *r
 		} else {
 			song = cachedSong
 		}
+	} else {
+		// TODO: This is potentially horribly slow. Find a better way.
+		for _, value := range *c.songMap {
+			if song.IpfsPath() == value.IpfsPath() {
+				song = value
+			}
+		}
 	}
 
 	return song, nil
