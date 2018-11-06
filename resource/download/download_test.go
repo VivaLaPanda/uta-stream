@@ -2,11 +2,10 @@ package download
 
 import (
 	"io"
-	"net/url"
 	"os"
 	"testing"
 
-	"github.com/VivaLaPanda/uta-stream/resource/metadata"
+	"github.com/VivaLaPanda/uta-stream/resource"
 	shell "github.com/ipfs/go-ipfs-api"
 )
 
@@ -40,40 +39,38 @@ func TestSplitAudio(t *testing.T) {
 func TestDownloadYoutube(t *testing.T) {
 	rawUrl := "https://youtu.be/nAwTw1aYy6M"
 	ipfsUrl := "localhost:5001"
-	expectedIpfsHash := "/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf"
-	alternativeExpected := "/ipfs/QmRJWABEnLWqi3dE4JwdiwRSSdukFKQf3Xmn19Y7Ws2jvd"
 
 	// Setup shell and testing url
-	sh := shell.NewShell(ipfsUrl)
-	urlToDL, err := url.Parse(rawUrl)
-	if err != nil {
-		t.Errorf("TestDownloadYoutube failed to parse the test url: %v", err)
-	}
-
-	metadata := metadata.NewCache("metadata.db.test")
+	ipfs := shell.NewShell(ipfsUrl)
+	songToTest, _ := resource.NewSong(rawUrl, false)
 
 	// Commence the download
-	ipfsPath, err := downloadYoutube(*urlToDL, sh, metadata, nil)
+	song, err := downloadYoutube(songToTest, ipfs)
 	if err != nil {
 		t.Errorf("TestDownloadYoutube failed due to an error: %v", err)
 	}
-	if ipfsPath != expectedIpfsHash && ipfsPath != alternativeExpected {
-		t.Errorf("TestDownloadYoutube failed. \nExpected hash:%v\nActual hash:%v\n", expectedIpfsHash, ipfsPath)
+	expectedTitle := "1080 Hz Sine Wave 30 sec"
+	if song.Title != expectedTitle {
+		t.Errorf("Song title doesn't equal expected. e: %s, a:%s\n", expectedTitle, song.Title)
+	}
+	ipfsPath := <-song.DLResult
+	expectedPaths := make(map[string]bool)
+	expectedPaths["/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf"] = true
+	expectedPaths["/ipfs/QmRJWABEnLWqi3dE4JwdiwRSSdukFKQf3Xmn19Y7Ws2jvd"] = true
+	if expectedPaths[ipfsPath] != true {
+		t.Errorf("IPFS path doesn't equal expected. e: %v, a:%s\n", expectedPaths[ipfsPath], ipfsPath)
 	}
 }
 
-func TestDownload(t *testing.T) {
-	rawUrl := "https://www.youtube.com/watch?v=nAwTw1aYy6M&feature=youtu.be"
+func TestFetchIpfs(t *testing.T) {
 	ipfsUrl := "localhost:5001"
+	ipfsPath := "/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf"
 
 	// Setup shell and testing url
-	sh := shell.NewShell(ipfsUrl)
+	ipfs := shell.NewShell(ipfsUrl)
 
-	metadata := metadata.NewCache("metadata.db.test")
-
-	ipfsPath, err := Download(rawUrl, sh, metadata, nil)
-	if err != nil {
-		t.Errorf("TestDownloadYoutube failed due to an error: %v", err)
+	reader, err := FetchIpfs(ipfsPath, ipfs)
+	if reader == nil {
+		t.Errorf("Failed to fetch IPFS path. Err: %s", err)
 	}
-	_ = ipfsPath
 }

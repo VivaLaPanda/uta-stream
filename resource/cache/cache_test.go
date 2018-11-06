@@ -1,11 +1,11 @@
 package cache
 
 import (
-	"io"
 	"os"
 	"testing"
 
-	"github.com/VivaLaPanda/uta-stream/resource/metadata"
+	"github.com/VivaLaPanda/uta-stream/resource"
+	shell "github.com/ipfs/go-ipfs-api"
 )
 
 func cleanupCache(cacheTestfile string) {
@@ -20,12 +20,9 @@ func cleanupCache(cacheTestfile string) {
 
 func TestWrite(t *testing.T) {
 	// Ensure the file isn't already there.
-	cacheTestfile := "TestWriteCacheFile.test"
-	metadataTestfile := "metadataCache.test"
+	cacheTestfile := "cache.db.test"
 	cleanupCache(cacheTestfile)
-	cleanupCache(metadataTestfile)
-	meta := metadata.NewCache(metadataTestfile)
-	c := NewCache(cacheTestfile, meta, "localhost:5001")
+	c := NewCache(cacheTestfile, "localhost:5001")
 	_, err := os.Stat(cacheTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat cacheFile after initing cache. Err: %v\n", err)
@@ -36,78 +33,70 @@ func TestWrite(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to write after launching. Err: %v\n", err)
 	}
-
-	cleanupCache(cacheTestfile)
-	cleanupCache(metadataTestfile)
 }
 
 func TestLoad(t *testing.T) {
+	testIpfsPath := "/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf"
 	// Ensure the file isn't already there.
-	cacheTestfile := "TestLoadCacheFile.test"
-	metadataTestfile := "metadataCache.test"
+	cacheTestfile := "cache.db.test"
 	cleanupCache(cacheTestfile)
-	cleanupCache(metadataTestfile)
-	meta := metadata.NewCache(metadataTestfile)
-	c := NewCache(cacheTestfile, meta, "localhost:5001")
+	c := NewCache(cacheTestfile, "localhost:5001")
 	_, err := os.Stat(cacheTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat cacheFile after initing cache. Err: %v\n", err)
+		return
 	}
 
 	// Now try to load
 	err = c.Load(cacheTestfile)
 	if err != nil {
 		t.Errorf("Failed to load cacheFile. Err: %v\n", err)
+		return
 	}
 
-	cleanupCache(cacheTestfile)
-	cleanupCache(metadataTestfile)
+	testSong, _ := resource.NewSong(testIpfsPath, false)
+	(*c.songMap)["foo"] = testSong
+
+	// Try write and loading
+	c.Write(cacheTestfile)
+	c.Load(cacheTestfile)
+
+	storedSong, exists := (*c.songMap)["foo"]
+	if !exists {
+		t.Errorf("Value we stored didn't load properly\n")
+		return
+	}
+	if storedSong.IpfsPath() != testIpfsPath {
+		t.Errorf("Value changed after store and load. e: %v, a: %v\n", testIpfsPath, storedSong.IpfsPath())
+	}
 }
 
-func TestFetchUrl(t *testing.T) {
-	// Ensure the file isn't already there.
-	cacheTestfile := "TestLoadCacheFile.test"
-	metadataTestfile := "metadataCache.test"
+func TestLookup(t *testing.T) {
+	testUrl := "https://youtu.be/nAwTw1aYy6M"
+	testIpfsPath := "/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf"
+	ipfsUrl := "localhost:5001"
+	cacheTestfile := "cache.db.test"
 	cleanupCache(cacheTestfile)
-	cleanupCache(metadataTestfile)
-	meta := metadata.NewCache(metadataTestfile)
-	c := NewCache(cacheTestfile, meta, "localhost:5001")
-	_, err := os.Stat(cacheTestfile)
-	if err != nil {
-		t.Errorf("Failed to stat cacheFile after initing cache. Err: %v\n", err)
+	c := NewCache(cacheTestfile, "localhost:5001")
+	ipfs := shell.NewShell(ipfsUrl)
+
+	// Lookup the url, the result shouldn't be able to find the IPFS url right away
+	song, _ := c.Lookup(testUrl, false, false)
+	if resourceID := song.ResourceID(); resourceID != testUrl {
+		t.Errorf("cache lookup resulted in incorrect resourceID")
 	}
 
-	// Get the reader which should contain the song data
-	resourceID, err := c.UrlCacheLookup("https://youtu.be/-Gig53HKpVI?list=PLz31nXegXIhJDnXGEJlaBgRPEfmEoav6O")
-	if err != nil {
-		t.Errorf("Failed to get URL. Err: %v\n", err)
-		return
-	}
-	expectedPath := "https://youtu.be/-Gig53HKpVI"
-	if resourceID != expectedPath {
-		t.Errorf("resourceID path doesn't match testing default. Expected: %v\nActual: %v\n", expectedPath, resourceID)
-		return
+	// Block until we're done with the DL
+	_, _ = song.Resolve(ipfs)
+	song, _ = c.Lookup(testUrl, false, false)
+	if resourceID := song.ResourceID(); resourceID != testIpfsPath {
+		t.Errorf("cache didn't find url even after it should have stored")
 	}
 
-	_, songReader, err := c.HardResolve(resourceID)
-	if err != nil {
-		t.Errorf("Failed to resolve resource into reader. Err: %v\n", err)
-		return
+	song, _ = c.Lookup(testIpfsPath, false, false)
+	if resourceID := song.ResourceID(); resourceID != testIpfsPath {
+		t.Errorf("cache lookup resulted in incorrect resourceID")
 	}
 
-	// Open file for writing
-	songFile, err := os.OpenFile("test_song.mp3", os.O_RDWR|os.O_CREATE, 0660)
-	if err != nil {
-		t.Errorf("Failed to open song file for writing. Err: %v\n", err)
-		return
-	}
-
-	// Copy data from reader to writer and then close both
-	io.Copy(songFile, songReader)
-	songFile.Close()
-
-	// File should be written now. Manual verification is needed to confirm
-	// the data is correct
-	cleanupCache(cacheTestfile)
-	cleanupCache(metadataTestfile)
+	c.Write(cacheTestfile)
 }

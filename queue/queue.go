@@ -8,30 +8,33 @@ import (
 	"sync"
 
 	"github.com/VivaLaPanda/uta-stream/queue/auto"
-	"github.com/VivaLaPanda/uta-stream/resource/cache"
+	"github.com/VivaLaPanda/uta-stream/resource"
+
+	shell "github.com/ipfs/go-ipfs-api"
 )
 
 type Queue struct {
-	fifo         []string
+	fifo         []*resource.Song
 	lock         *sync.Mutex
 	autoq        *auto.AQEngine
-	cache        *cache.Cache
+	ipfs         *shell.Shell
 	AutoqEnabled bool
 }
 
 // NeqQueue will return a queue structure with the provided autoq engine and cache
 // attached. enableAutoq will determine whether a Pop will attempt to fetch
 // from the autoq.
-func NewQueue(aqEngine *auto.AQEngine, cache *cache.Cache, enableAutoq bool) *Queue {
+func NewQueue(aqEngine *auto.AQEngine, enableAutoq bool, ipfsUrl string) *Queue {
 	return &Queue{
 		lock:         &sync.Mutex{},
 		autoq:        aqEngine,
 		AutoqEnabled: enableAutoq,
-		cache:        cache}
+		ipfs:         shell.NewShell(ipfsUrl),
+	}
 }
 
 // Pop returns the audio resource next in the queue along with state flags.
-func (q *Queue) Pop() (ipfsPath string, songReader io.Reader, emptyq bool, fromAuto bool) {
+func (q *Queue) Pop() (song *resource.Song, songReader io.Reader, emptyq bool, fromAuto bool) {
 	// If there is nothing to queue and we have autoq enabled,
 	// get from autoq. If autoq gives us an empty string (no audio to play)
 	// or autoq is off, return that the queue is empty
@@ -39,40 +42,40 @@ func (q *Queue) Pop() (ipfsPath string, songReader io.Reader, emptyq bool, fromA
 	if len(q.fifo) == 0 {
 		if q.AutoqEnabled {
 			fromAuto = true
-			ipfsPath = q.autoq.Vpop()
-			if ipfsPath == "" {
-				return "", nil, true, fromAuto
+			song, err := q.autoq.Vpop()
+			if err != nil {
+				return nil, nil, true, fromAuto
 			}
 
 			// TODO: If resource is IPFS but can't be fetched this blocks, effectivelly
 			// killing the server. Fix this.
-			ipfsPath, songReader, err := q.cache.HardResolve(ipfsPath)
+			songReader, err = song.Resolve(q.ipfs)
 			if err != nil {
-				log.Printf("Issue when resolving resource from AutoQ. Err: %v\n", err)
-				return "", nil, true, fromAuto
+				log.Printf("Issue when resolving song. Err: %v\n", err)
+				return nil, nil, true, fromAuto
 			}
 
-			return ipfsPath, songReader, false, fromAuto
+			return song, songReader, false, fromAuto
 		} else {
-			return "", nil, true, fromAuto
+			return nil, nil, true, fromAuto
 		}
 	}
 
 	q.lock.Lock()
 	// Top (just get next element, don't remove it)
-	resourceID := q.fifo[0]
+	song = q.fifo[0]
 	// Discard top element
 	q.fifo = q.fifo[1:]
 	q.lock.Unlock()
 
 	// Resolve the resource ID in the queue
-	ipfsPath, songReader, err := q.cache.HardResolve(resourceID)
+	songReader, err := song.Resolve(q.ipfs)
 	if err != nil {
 		log.Printf("Issue when resolving resource from Queue. Err: %v\n", err)
-		return "", nil, true, fromAuto
+		return q.Pop()
 	}
 
-	return ipfsPath, songReader, false, fromAuto
+	return song, songReader, false, fromAuto
 }
 
 // IsEmpty returns a boolean indicating whether the queue should be considered empty
@@ -88,23 +91,23 @@ func (q *Queue) IsEmpty() bool {
 }
 
 // Add the provided song to the queue at the back
-func (q *Queue) AddToQueue(ipfsPath string) {
+func (q *Queue) AddToQueue(song *resource.Song) {
 	q.lock.Lock()
-	q.fifo = append(q.fifo, ipfsPath)
+	q.fifo = append(q.fifo, song)
 	q.lock.Unlock()
 }
 
 // Add the provided song to the queue at the front
-func (q *Queue) PlayNext(ipfsPath string) {
+func (q *Queue) PlayNext(song *resource.Song) {
 	q.lock.Lock()
-	q.fifo = append([]string{ipfsPath}, q.fifo...)
+	q.fifo = append([]*resource.Song{song}, q.fifo...)
 	q.lock.Unlock()
 }
 
 // Remove all items from the queue. Will not dump the encoder (current song)
 func (q *Queue) Dump() {
 	q.lock.Lock()
-	q.fifo = make([]string, 0)
+	q.fifo = make([]*resource.Song, 0)
 	q.lock.Unlock()
 }
 
@@ -115,19 +118,15 @@ func (q *Queue) Length() int {
 
 // Get queue returns a copy of the real queue, and while it does so
 // attempts to resolve any placeholders
-func (q *Queue) GetQueue() []string {
+func (q *Queue) GetQueue() []*resource.Song {
 	// Go through the queue and try to resolve any placeholders
 	q.lock.Lock()
 	indexesToDelete := make([]int, 0)
 	for idx, elem := range q.fifo {
-		ipfsPath, err := q.cache.SoftResolve(elem)
+		err := elem.CheckFailure()
 		if err != nil {
-			log.Printf("unresolvable resource in queue, removing now.")
+			log.Printf("Song %s had a download error: %s", elem.Url(), err)
 			indexesToDelete = append(indexesToDelete, idx)
-		} else {
-			if ipfsPath != "" {
-				q.fifo[idx] = ipfsPath
-			}
 		}
 	}
 	for _, elem := range indexesToDelete {
@@ -136,7 +135,7 @@ func (q *Queue) GetQueue() []string {
 	q.lock.Unlock()
 
 	// Make a copy so whoever is reading this can't write it
-	qCopy := make([]string, len(q.fifo))
+	qCopy := make([]*resource.Song, len(q.fifo))
 	q.lock.Lock()
 	copy(qCopy, q.fifo)
 	q.lock.Unlock()
@@ -144,7 +143,7 @@ func (q *Queue) GetQueue() []string {
 	return qCopy
 }
 
-func remove(s []string, i int) []string {
+func remove(s []*resource.Song, i int) []*resource.Song {
 	s[len(s)-1], s[i] = s[i], s[len(s)-1]
 	return s[:len(s)-1]
 }

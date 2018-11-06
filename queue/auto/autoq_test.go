@@ -4,6 +4,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/VivaLaPanda/uta-stream/resource/cache"
 )
 
 func cleanupAutoq(autoqTestfile string) {
@@ -18,8 +20,10 @@ func cleanupAutoq(autoqTestfile string) {
 
 func TestWrite(t *testing.T) {
 	// Ensure the file isn't already there.
-	autoqTestfile := "TestWriteQfile.test"
-	q := NewAQEngine(autoqTestfile, 0, 1)
+	autoqTestfile := "autoq.db.test"
+	cacheFile := "cache.db.test"
+	c := cache.NewCache(cacheFile, "localhost:5001")
+	q := NewAQEngine(autoqTestfile, c, 0, 1)
 	_, err := os.Stat(autoqTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)
@@ -32,12 +36,15 @@ func TestWrite(t *testing.T) {
 	}
 
 	cleanupAutoq(autoqTestfile)
+	cleanupAutoq(cacheFile)
 }
 
 func TestLoad(t *testing.T) {
 	// Ensure the file isn't already there.
 	autoqTestfile := "TestLoadQfile.test"
-	q := NewAQEngine(autoqTestfile, 0, 1)
+	cacheFile := "cache.db.test"
+	c := cache.NewCache(cacheFile, "localhost:5001")
+	q := NewAQEngine(autoqTestfile, c, 0, 1)
 	_, err := os.Stat(autoqTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)
@@ -50,13 +57,16 @@ func TestLoad(t *testing.T) {
 	}
 
 	cleanupAutoq(autoqTestfile)
+	cleanupAutoq(cacheFile)
 }
 
 func TestNotifyPlayed(t *testing.T) {
 	// Bare bones notifyplayed test
 	// Ensure the file isn't already there.
 	autoqTestfile := "TestLoadQfile.test"
-	q := NewAQEngine(autoqTestfile, 0, 1)
+	cacheFile := "cache.db.test"
+	c := cache.NewCache(cacheFile, "localhost:5001")
+	q := NewAQEngine(autoqTestfile, c, 0, 1)
 	_, err := os.Stat(autoqTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)
@@ -65,13 +75,17 @@ func TestNotifyPlayed(t *testing.T) {
 	q.NotifyPlayed("test", true)
 
 	// If we didn't panic than this test is a pass
+	cleanupAutoq(autoqTestfile)
+	cleanupAutoq(cacheFile)
 }
 
 func TestVpop(t *testing.T) {
 	// Simple test of vpop
 	// Ensure the file isn't already there.
 	autoqTestfile := "TestLoadQfile.test"
-	q := NewAQEngine(autoqTestfile, 1, 1)
+	cacheFile := "cache.db.test"
+	c := cache.NewCache(cacheFile, "localhost:5001")
+	q := NewAQEngine(autoqTestfile, c, 1, 1)
 	_, err := os.Stat(autoqTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)
@@ -85,27 +99,32 @@ func TestVpop(t *testing.T) {
 	time.Sleep(1) // Necessary because NotifyPlayed is async
 
 	// Since the last song was a b, the next should be an a
-	song := q.Vpop()
-	if song != "test_a" {
+	song, _ := q.Vpop()
+	songPath := song.ResourceID()
+	if songPath != "test_a" {
 		t.Errorf("Autoq produced unexpected song (expected != actual). %v != %v", "test_a", song)
 	}
 
 	// Play an a, now the next should be a b
 	q.NotifyPlayed("test_a", true)
 	time.Sleep(1)
-	song = q.Vpop()
+	song, _ = q.Vpop()
 
-	if song != "test_b" {
+	songPath = song.ResourceID()
+	if songPath != "test_b" {
 		t.Errorf("Autoq produced unexpected song (expected != actual). %v != %v", "test_b", song)
 	}
 
 	cleanupAutoq(autoqTestfile)
+	cleanupAutoq(cacheFile)
 }
 
 func TestMigrate(t *testing.T) {
 	// Ensure the file isn't already there.
 	autoqTestfile := "autoq.db"
-	q := NewAQEngine(autoqTestfile, 0, 1)
+	cacheFile := "cache.db.test"
+	c := cache.NewCache(cacheFile, "localhost:5001")
+	q := NewAQEngine(autoqTestfile, c, 0, 1)
 	_, err := os.Stat(autoqTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)

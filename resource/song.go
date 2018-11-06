@@ -1,0 +1,161 @@
+package resource
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/url"
+	"time"
+
+	shell "github.com/ipfs/go-ipfs-api"
+	"gopkg.in/djherbis/buffer.v1"
+	"gopkg.in/djherbis/nio.v2"
+)
+
+var bufferSize int64 = 10000 //kb
+
+type Song struct {
+	ipfsPath  string `json:"currentSong"`
+	url       *url.URL
+	Title     string
+	Duration  time.Duration
+	DLResult  chan string
+	DLFailure chan error
+	reader    io.ReadCloser
+	Writer    io.WriteCloser
+}
+
+func NewSong(resourceID string, hotwriter bool) (song *Song, err error) {
+	song = &Song{
+		ipfsPath:  "",
+		url:       nil,
+		Title:     "",
+		Duration:  0,
+		DLResult:  make(chan string, 1),
+		DLFailure: make(chan error, 1),
+	}
+
+	if IsIpfs(resourceID) {
+		song.ipfsPath = resourceID
+	} else {
+		song.url, err = url.Parse(resourceID)
+		if err != nil {
+			return nil, fmt.Errorf("ResourceID can't be used to make song. Err: %s", err)
+		}
+	}
+
+	if hotwriter {
+		buf := buffer.New(bufferSize * 1024) // In memory Buffer
+		song.reader, song.Writer = nio.Pipe(buf)
+	}
+
+	return song, nil
+}
+
+func (s *Song) MarshalJSON() ([]byte, error) {
+	var rawURL string
+	if s.Url() != nil {
+		rawURL = s.Url().String()
+	} else {
+		rawURL = ""
+	}
+
+	return json.Marshal(&struct {
+		IpfsPath string        `json:"ipfsPath"`
+		Url      string        `json:"url"`
+		Title    string        `json:"title"`
+		Duration time.Duration `json:"duration"`
+	}{
+		IpfsPath: s.IpfsPath(),
+		Url:      rawURL,
+		Title:    s.Title,
+		Duration: s.Duration,
+	})
+}
+
+func (s *Song) UnmarshalJSON(data []byte) error {
+	aux := &struct {
+		IpfsPath string        `json:"ipfsPath"`
+		Url      string        `json:"url"`
+		Title    string        `json:"title"`
+		Duration time.Duration `json:"duration"`
+	}{}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	s.ipfsPath = aux.IpfsPath
+	s.Title = aux.Title
+	s.Duration = aux.Duration
+	var err error
+	if s.url, err = url.Parse(aux.Url); err != nil {
+		s.url = nil
+	}
+
+	return nil
+}
+
+func (s *Song) ResourceID() (resourceID string) {
+	// If we have the IPFS path fetch it right away
+	if s.ipfsPath != "" {
+		return s.ipfsPath
+	}
+
+	// Check to see if a download we were wairing on finished, if so
+	// return the IPFS path, otherwise just return the URL
+	select {
+	case resourceID = <-s.DLResult:
+		s.ipfsPath = resourceID
+		return resourceID
+	default:
+		return s.url.String()
+	}
+}
+
+func (s *Song) IpfsPath() string {
+	return s.ipfsPath
+}
+
+func (s *Song) Url() *url.URL {
+	return s.url
+}
+
+func (s *Song) Resolve(ipfs *shell.Shell) (reader io.ReadCloser, err error) {
+	// Check to see if we had a DL we were waiting on, if so store the result
+	select {
+	case err = <-s.DLFailure:
+		return nil, err
+	case s.ipfsPath = <-s.DLResult:
+	default:
+		// default case so we move on if we don't have anything to recieve
+	}
+
+	// If we have a reader from the DL, that's the priority, otherwise return the
+	// ipfs reader if we can
+	if s.reader != nil {
+		return s.reader, nil
+	} else if s.ipfsPath != "" {
+		return ipfs.Cat(s.ipfsPath)
+	}
+
+	// We need to play the song but aren't ready, block until the DL is finished
+	select {
+	case s.ipfsPath = <-s.DLResult:
+		return ipfs.Cat(s.ipfsPath)
+	case err = <-s.DLFailure:
+		return nil, err
+	}
+}
+
+func (s *Song) CheckFailure() (err error) {
+	select {
+	case err = <-s.DLFailure:
+		return err
+	default:
+		return nil
+	}
+}
+
+func IsIpfs(resourceID string) bool {
+	return len(resourceID) >= 6 && resourceID[:6] == "/ipfs/"
+}

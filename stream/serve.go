@@ -20,7 +20,7 @@ const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 // catchupFrameIncrement accounts for the fact that fetching the next song may have
 // introduced a delay by speeding up serving right when a song starts
-var catchupFrameIncrement = 1
+var catchupFrameIncrement = 2
 
 // Seed the random generator
 func init() {
@@ -61,7 +61,7 @@ func generateNewStream(w http.ResponseWriter, req *http.Request) {
 		killConsumer <- consumerID
 	}()
 
-	for len(mediaConsumer) < 10 {
+	for len(mediaConsumer) < 5 {
 		time.Sleep(1 * time.Second)
 	}
 
@@ -71,9 +71,7 @@ func generateNewStream(w http.ResponseWriter, req *http.Request) {
 		_, err = w.Write(bytesToStream)
 		if err != nil {
 			_, err = w.Write(bytesToStream) // Retry once
-			errString := fmt.Sprintf("Copying audio data into response failed: %v", err)
-			log.Fatalf(errString)
-			http.Error(w, errString, 500)
+			log.Printf("Copying audio data into response failed: %v", err)
 			return
 		}
 		flusher.Flush() // Trigger "chunked" encoding and send a chunk...
@@ -113,7 +111,7 @@ func ServeAudioOverHttp(inputAudio <-chan []byte, packetsPerSecond int, port int
 			// An empty signal from inputAudio indicates the end of a track.
 			// indicate that we need to play faster than normal to catch up
 			if len(audioBytes) < 1 {
-				catchupFrames += 1
+				catchupFrames += catchupFrameIncrement
 				audioBytes = <-inputAudio
 				continue
 			}

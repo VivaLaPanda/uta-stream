@@ -1,38 +1,27 @@
-// Package cache contains components used to wrap song download logic so that
+// Package cache contains components used to wrap resource.Song download logic so that
 // tracks need only be downloaded/converted once.
 package cache
 
 import (
-	"encoding/gob"
+	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/url"
 	"os"
-	"sync"
-	"time"
 
+	"github.com/VivaLaPanda/uta-stream/resource"
 	"github.com/VivaLaPanda/uta-stream/resource/download"
-	"github.com/VivaLaPanda/uta-stream/resource/metadata"
 	shell "github.com/ipfs/go-ipfs-api"
 )
 
 // Cache is a struct which tracks the necessary state to translate
 // resourceIDs into resolveable ipfs hashes or readers
 type Cache struct {
-	urlMap          *map[string]string
-	urlMapLock      *sync.RWMutex
+	songMap         *map[string]*resource.Song
 	ipfs            *shell.Shell
 	cacheFilename   string
-	metadata        *metadata.Cache
-	Placeholders    map[string]*placeholder
 	activeDownloads chan bool
 }
-
-// How many minutes to wait between saves of the cache state
-// This can be long because normal changes to the cache *should* save as well
-// Autosave just helps in case of write failures
-var autosaveTimer time.Duration = 30
 
 // Used to limit how many ongoing downloads we have. useful to make sure
 // Youtube doesn't get mad at us
@@ -43,42 +32,28 @@ var maxActiveDownloads = 3
 // so that the cache is preserved between launches. The ipfsurl will determine
 // the daemon used to store/fetch ipfs resources. Allows for decoupling the storage
 // engine from the cache.
-func NewCache(cacheFile string, metadata *metadata.Cache, ipfsUrl string) *Cache {
-	urlMap := make(map[string]string)
-	placeholders := make(map[string]*placeholder)
-	c := &Cache{&urlMap,
-		&sync.RWMutex{},
-		shell.NewShell(ipfsUrl),
-		cacheFile,
-		metadata,
-		placeholders,
-		make(chan bool, maxActiveDownloads)}
+func NewCache(cacheFilename string, ipfsUrl string) *Cache {
+	songMap := make(map[string]*resource.Song)
+	c := &Cache{
+		songMap:         &songMap,
+		ipfs:            shell.NewShell(ipfsUrl),
+		cacheFilename:   cacheFilename,
+		activeDownloads: make(chan bool, maxActiveDownloads),
+	}
 
 	// Confirm we can interact with our persitent storage
-	_, err := os.Stat(cacheFile)
+	_, err := os.Stat(cacheFilename)
 	if err == nil {
-		err = c.Load(cacheFile)
+		err = c.Load(cacheFilename)
 	} else if os.IsNotExist(err) {
-		log.Printf("cacheFile %s doesn't exist. Creating new cacheFile", cacheFile)
-		err = c.Write(cacheFile)
+		log.Printf("cacheFilename %s doesn't exist. Creating new cacheFilename", cacheFilename)
+		err = c.Write(cacheFilename)
 	}
 
 	if err != nil {
-		errString := fmt.Sprintf("Fatal error when interacting with cacheFile on launch.\nErr: %v\n", err)
+		errString := fmt.Sprintf("Fatal error when interacting with cacheFilename on launch.\nErr: %v\n", err)
 		panic(errString)
 	}
-
-	// Write the cache to disk occasionally to preserve it between runs
-	go func() {
-		for {
-			time.Sleep(autosaveTimer * time.Minute)
-			err := c.Write(cacheFile)
-			if err != nil {
-				log.Printf("WARNING! Failed to write cacheFile. Data will not persist until"+
-					"this is fixed. \n Err: %v\n", err)
-			}
-		}
-	}()
 
 	return c
 }
@@ -86,15 +61,14 @@ func NewCache(cacheFile string, metadata *metadata.Cache, ipfsUrl string) *Cache
 // Method which will write the cache data to the provided file. Will overwrite
 // a file if one already exists at that location.
 func (c *Cache) Write(filename string) error {
-	cacheFile, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0660)
-	defer cacheFile.Close()
+	cacheFilename, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0660)
+	defer cacheFilename.Close()
 	if err != nil {
 		return err
 	}
-	encoder := gob.NewEncoder(cacheFile)
-	c.urlMapLock.RLock()
-	encoder.Encode(c.urlMap)
-	c.urlMapLock.RUnlock()
+
+	encoder := json.NewEncoder(cacheFilename)
+	encoder.Encode(c.songMap)
 
 	return nil
 }
@@ -103,98 +77,55 @@ func (c *Cache) Write(filename string) error {
 // state of the object. Should pretty much only be used when the object is created
 // but it is left public in case a client needs to load old data or something
 func (c *Cache) Load(filename string) error {
-	file, err := os.Open(filename)
+	file, err := os.OpenFile(filename, os.O_RDONLY, 0660)
 	defer file.Close()
-	if err == nil {
-		decoder := gob.NewDecoder(file)
-		c.urlMapLock.Lock()
-		err = decoder.Decode(c.urlMap)
-		c.urlMapLock.Unlock()
-	}
 	if err != nil {
 		return err
 	}
 
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(c.songMap)
+
 	return nil
-}
-
-// Quick lookup checks the cache for a url, but if it fails to find the resource
-// it will not try to download it and will just return.
-func (c *Cache) QuickLookup(url string) (ipfsPath string, exists bool) {
-	// normalize
-	url, err := urlNormalize(url)
-	if err != nil {
-		return "", false
-	}
-	// Check the cache for the provided URL
-	c.urlMapLock.RLock()
-	ipfsPath, exists = (*c.urlMap)[url]
-	c.urlMapLock.RUnlock()
-
-	return ipfsPath, exists
 }
 
 // UrlCacheLookup will check the cache for the provided url, but on a cache miss
 // it will download the resource and add it to the cache, then return the hash
-func (c *Cache) UrlCacheLookup(url string) (resourceID string, err error) {
-	// normalize
-	url, err = urlNormalize(url)
+func (c *Cache) Lookup(resourceID string, urgent bool, noDownload bool) (song *resource.Song, err error) {
+	song, err = resource.NewSong(resourceID, urgent)
 	if err != nil {
-		return "", fmt.Errorf("Provided resource doesn't appear to be a link: %v. \nErr: %v", url, err)
+		return nil, err
 	}
 
-	// Check the cache for the provided URL
-	c.urlMapLock.RLock()
-	resourceID, exists := (*c.urlMap)[url]
-	c.urlMapLock.RUnlock()
-
-	if !exists {
-		// If it doesn't exist make a placeholder
-		// If we only have two or less placeholders prepare to expose the
-		// download/convert data early
-		newPlaceholder, hotWriter := c.AddPlaceholder(url)
-		resourceID = url
-
-		// Downloading could take a bit, do that on a new routine so we can return
-		go func(url string, pHolder *placeholder, activeDownloads chan bool) {
-			// Make sure we aren't past the download limit
-			activeDownloads <- true
-			// Go fetch the provided URL
-			ipfsPath, err := download.Download(url, c.ipfs, c.metadata, hotWriter)
-			if err != nil {
-				log.Printf("failed to DL requested resource: %v\nerr:%v", url, err)
-				delete(c.Placeholders, url)
-				return
-			}
-			// Register that we're done with the DL
-			<-activeDownloads
-
-			// Create the URL => ipfs mapping in the cache
-			c.urlMapLock.Lock()
-			(*c.urlMap)[url] = ipfsPath
-			c.urlMapLock.Unlock()
-			c.Write(c.cacheFilename)
-
-			// Deal with placeholder
-			pHolder.ipfsPath = ipfsPath
-			pHolder.done <- true
-		}(url, newPlaceholder, c.activeDownloads)
-	}
-
-	return resourceID, nil
-}
-
-// Fetch IPFS will get the provided IPFS resource and return the reader of its
-// data
-func (c *Cache) FetchIpfs(ipfsPath string) (r io.ReadCloser, err error) {
-	go func() {
-		err := c.ipfs.Pin(ipfsPath) // Any time we fetch we also pin. This goes away eventually
+	if !resource.IsIpfs(resourceID) {
+		// normalize
+		url, err := urlNormalize(resourceID)
 		if err != nil {
-			log.Printf("Failed to pin IPFS path! %v may not play later\n", err)
+			return nil, fmt.Errorf("Provided resource doesn't appear to be a link: %v. \nErr: %v", url, err)
 		}
-	}()
 
-	return c.ipfs.Cat(ipfsPath)
+		// Check the cache for the provided URL
+		cachedSong, exists := (*c.songMap)[url]
+
+		if !exists {
+			if !noDownload {
+				song, err = download.Download(song, c.ipfs)
+				(*c.songMap)[url] = song
+				c.Write(c.cacheFilename)
+			}
+		} else {
+			song = cachedSong
+		}
+	} else {
+		// TODO: This is potentially horribly slow. Find a better way.
+		for _, value := range *c.songMap {
+			if song.IpfsPath() == value.IpfsPath() {
+				song = value
+			}
+		}
+	}
+
+	return song, nil
 }
 
 // Try and normalize URLs to reduce duplication in resource cache
@@ -208,7 +139,7 @@ func urlNormalize(rawUrl string) (normalizedUrl string, err error) {
 	if parsedUrl.Hostname() == "youtube.com" || parsedUrl.Hostname() == "www.youtube.com" {
 		vidID := parsedUrl.Query().Get("v")
 		normalizedUrl = fmt.Sprintf("https://youtu.be/%s", vidID)
-	} else {
+	} else { // Youtube url is short
 		values := parsedUrl.Query()
 		values.Del("list")
 		parsedUrl.RawQuery = values.Encode()

@@ -11,11 +11,15 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/VivaLaPanda/uta-stream/resource"
+	"github.com/VivaLaPanda/uta-stream/resource/cache"
 )
 
 type AQEngine struct {
 	markovChain *chain
 	playedSongs chan string
+	cache       *cache.Cache
 }
 
 // How many minutes to wait between saves of the autoq state
@@ -26,8 +30,8 @@ var autosaveTimer time.Duration = 5
 // so that the chain is preserved between launches. Chainbreak prob will determine
 // how often to give a random suggestion instead of the *real* one. Prefix length
 // determines how far back the autoq's "memory" goes back. Longer = more predictable
-func NewAQEngine(qfile string, chainbreakProb float64, prefixLength int) *AQEngine {
-	q := &AQEngine{newChain(prefixLength, chainbreakProb), make(chan string)}
+func NewAQEngine(qfile string, cache *cache.Cache, chainbreakProb float64, prefixLength int) *AQEngine {
+	q := &AQEngine{newChain(prefixLength, chainbreakProb), make(chan string), cache}
 
 	// Confirm we can interact with our persitent storage
 	_, err := os.Stat(qfile)
@@ -94,14 +98,15 @@ func (q *AQEngine) Load(filename string) error {
 }
 
 // Vpop simply returns the next song according to the Markov chain
-func (q *AQEngine) Vpop() string {
-	return q.markovChain.generate()
+func (q *AQEngine) Vpop() (*resource.Song, error) {
+	return q.cache.Lookup(q.markovChain.generate(), false, true)
 }
 
 // The interface for external callers to add to the markov chain
 // In our case we use it to notify the chain that a song was played in full
 // learn from allows you to advance the chain without adding data if false
 func (q *AQEngine) NotifyPlayed(resourceID string, learnFrom bool) {
+
 	q.markovChain.chainLock.Lock()
 	defer q.markovChain.chainLock.Unlock()
 
