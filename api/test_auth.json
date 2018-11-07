@@ -3,5 +3,10 @@
         "foo": ["enqueue"],
         "*": ["playnext", "skip"],
         "su": ["*"]
+    },
+    "roleNames": {
+        "foo": "some-user",
+        "*": "any-user",
+        "su": "admin-user"
     }
 }

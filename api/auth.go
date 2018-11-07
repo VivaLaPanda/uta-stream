@@ -10,16 +10,21 @@ import (
 // Each token represents a list of endpoints which one is authorized to
 // hit
 type authMiddleware struct {
-	tokenRoles map[string][]string
-	enabled    bool
-	basePath   string
+	data     authData
+	enabled  bool
+	basePath string
+}
+
+type authData struct {
+	TokenRoles map[string][]string `json:"tokenRoles"`
+	RoleNames  map[string]string   `json:"roleNames"`
 }
 
 // NewAuthMiddleware will prepare the struct which handles state for the
 // authorization middleware
 func NewAuthMiddleware(authConfigFile string, basePath string) (amw *authMiddleware, err error) {
-	var tokenRoles map[string][]string
-	authMiddleware := &authMiddleware{tokenRoles, false, basePath}
+	data := &authData{}
+	authMiddleware := &authMiddleware{*data, false, basePath}
 	if authConfigFile == "" {
 		return authMiddleware, nil
 	}
@@ -28,22 +33,15 @@ func NewAuthMiddleware(authConfigFile string, basePath string) (amw *authMiddlew
 	if err != nil {
 		return authMiddleware, fmt.Errorf("failed to initialize auth middleware: %v", err)
 	}
-	// Get the json out of the file
-	var rootJson map[string]*json.RawMessage
-	jsonParser := json.NewDecoder(configFile)
-	err = jsonParser.Decode(&rootJson)
-	if err != nil {
-		return authMiddleware, fmt.Errorf("failed to initialize auth middleware: %v", err)
-	}
 
-	// Assign the json to the map
-	err = json.Unmarshal(*rootJson["tokenRoles"], &tokenRoles)
+	decoder := json.NewDecoder(configFile)
+	err = decoder.Decode(data)
 	if err != nil {
-		return authMiddleware, fmt.Errorf("failed to initialize auth middleware: %v", err)
+		return authMiddleware, fmt.Errorf("failed to parse config file: %v", err)
 	}
+	authMiddleware.data = *data
 
 	authMiddleware.enabled = true
-	authMiddleware.tokenRoles = tokenRoles
 	return authMiddleware, nil
 }
 
@@ -76,7 +74,7 @@ func (amw *authMiddleware) validateToken(token string, route string) (valid bool
 		token = "Bearer *"
 	}
 	token = token[7:]
-	if roles, found := amw.tokenRoles[token]; found {
+	if roles, found := amw.data.TokenRoles[token]; found {
 		for _, role := range roles {
 			if role == "*" {
 				return true
