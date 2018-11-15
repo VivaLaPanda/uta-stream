@@ -163,7 +163,7 @@ func queuer(q *queue.Queue, c *cache.Cache, qFunc QFunc) http.Handler {
 		w.WriteHeader(http.StatusOK)
 		jsonData, _ := songToQueue.MarshalJSON()
 		fmt.Fprintf(w, `{"message": "successfully added",
-			               "track":"%s"}`, jsonData)
+			               "track":%s}`, jsonData)
 	})
 }
 
