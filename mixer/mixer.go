@@ -7,11 +7,12 @@
 package mixer
 
 import (
+	"io"
 	"log"
 	"sync"
 	"time"
 
-	"github.com/VivaLaPanda/uta-stream/encoder"
+	"github.com/VivaLaPanda/uta-stream/mp3"
 	"github.com/VivaLaPanda/uta-stream/queue"
 	"github.com/VivaLaPanda/uta-stream/resource"
 )
@@ -19,13 +20,13 @@ import (
 // Mixer is a struct which contains the persistent state necessary to talk
 // to the queue and to interact with playback as it happens
 type Mixer struct {
-	Output           chan []byte
-	packetsPerSecond int
-	currentSongData  *chan []byte
-	queue            *queue.Queue
-	CurrentSongInfo  *resource.Song
-	playLock         *sync.Mutex
-	learnFrom        bool
+	Output          chan []byte
+	bitrate         int
+	currentSongData io.ReadCloser
+	queue           *queue.Queue
+	CurrentSongInfo *resource.Song
+	playLock        *sync.Mutex
+	learnFrom       bool
 }
 
 // NewMixer will return a mixer struct. Said struct will have the provided queue
@@ -35,40 +36,46 @@ type Mixer struct {
 // A reasonable default for packetsPerSecond is 2, but it determines whether
 // we send data in larger  or smaller chunks to the clients
 // The mixer object will be tied to a goroutine which will populate the output
-func NewMixer(queue *queue.Queue, packetsPerSecond int) *Mixer {
-	currentSong := make(chan []byte, 1)
+func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 	mixer := &Mixer{
-		Output:           make(chan []byte, 16), // Needs to have space to handle song transition
-		packetsPerSecond: packetsPerSecond,
-		currentSongData:  &currentSong,
-		queue:            queue,
-		CurrentSongInfo:  &resource.Song{},
-		playLock:         &sync.Mutex{},
-		learnFrom:        false}
-	close(currentSong)
-	// Spin up the job to cast from the current song to our output
-	// and handle song transitions
+		Output:          make(chan []byte, 16), // Needs to have space to handle song transition
+		bitrate:         bitrate,
+		currentSongData: nil,
+		queue:           queue,
+		CurrentSongInfo: &resource.Song{},
+		playLock:        &sync.Mutex{},
+		learnFrom:       false}
+
+	// Prep to encode the mp3
+	wavInput, mp3Output, _, err := mp3.WavToMp3(mixer.bitrate)
+	if err != nil {
+		log.Printf("Failed to prepare mp3 encoder. Err: %v\n", err)
+		return nil
+	}
+
+	// Take all output from the encoder and put it on the Output channel
 	go func() {
-		for true {
-			for broadcastPacket := range *mixer.currentSongData {
-				// We can succesfully read from the current song, all is good
+		done := byteReader(mp3Output, mixer.Output, 500*(bitrate/8))
+		<-done
+		log.Panicf("Encoder stopped producing output\n")
+	}()
 
-				// This lock is used to remotely pause here if necessary.
-				// If the lock is unlocked, all that will happen is the program moving on,
-				// otherwise we will wait until the lock is released elsewhere
-				mixer.playLock.Lock()
-				mixer.playLock.Unlock()
-				mixer.Output <- broadcastPacket
-			}
-			// Send an empty byte so the consumer can determine the song ended
-			mixer.Output <- make([]byte, 0)
+	// Take song data and put that into the encoder
+	// also handle song transitions
+	go func() {
+		for {
+			// Check if we even have anything to try and play
+			if mixer.currentSongData != nil {
+				// Take the current song and put it into the encoder
+				io.Copy(wavInput, mixer.currentSongData)
 
-			// We couldn't play from current, assume that the song ended
-			// Also, if we just recieved a skip, then we don't want to use that
-			// song to train qutoq
-			if mixer.CurrentSongInfo.IpfsPath() != "" {
-				mixer.queue.NotifyDone(mixer.CurrentSongInfo.IpfsPath(), mixer.learnFrom)
-				mixer.learnFrom = true
+				// We couldn't play from current, assume that the song ended
+				// Also, if we just recieved a skip, then we don't want to use that
+				// song to train qutoq
+				if mixer.CurrentSongInfo.IpfsPath() != "" {
+					mixer.queue.NotifyDone(mixer.CurrentSongInfo.IpfsPath(), mixer.learnFrom)
+					mixer.learnFrom = true
+				}
 			}
 
 			// Get the next song channel and associated metadata
@@ -78,8 +85,6 @@ func NewMixer(queue *queue.Queue, packetsPerSecond int) *Mixer {
 				mixer.learnFrom = !fromAuto
 				mixer.currentSongData = tempSong
 				mixer.CurrentSongInfo = tempPath
-				broadcastPacket := <-*mixer.currentSongData
-				mixer.Output <- broadcastPacket
 			} else {
 				time.Sleep(2 * time.Second)
 			}
@@ -97,8 +102,8 @@ func (m *Mixer) Skip() {
 		recover()
 	}()
 
+	m.currentSongData.Close()
 	m.learnFrom = false
-	close(*m.currentSongData)
 }
 
 // Will allow playing by allowing writes to output
@@ -118,19 +123,56 @@ func (m *Mixer) Pause() {
 }
 
 // Will go to queue and get the next track and associated metadata
-func (m *Mixer) fetchNextSong() (nextSongChan *chan []byte, nextSong *resource.Song, isEmpty bool, fromAuto bool) {
+func (m *Mixer) fetchNextSong() (
+	wavOutput io.ReadCloser,
+	nextSong *resource.Song,
+	isEmpty bool,
+	fromAuto bool) {
+
+	// Prep mp3 -> wav/pcm converter
+	mp3Input, wavOutput, _, err := mp3.Mp3ToWav()
+	if err != nil {
+		log.Printf("Failed to decode song (%v). Err: %v\n", nextSong, err)
+		return nil, nextSong, true, fromAuto
+	}
+
+	// Get MP3 reader
 	nextSong, nextSongReader, isEmpty, fromAuto := m.queue.Pop()
-	var err error
 	if isEmpty {
 		return nil, nextSong, true, fromAuto
 	}
 
-	// Start encoding for broadcast
-	nextSongChan, err = encoder.EncodeMP3(nextSongReader, m.packetsPerSecond)
-	if err != nil {
-		log.Printf("Failed to encode song (%v). Err: %v\n", nextSong, err)
-		return nil, nextSong, true, fromAuto
+	// Start converting the mp3 data to wav
+	go func() {
+		io.Copy(mp3Input, nextSongReader)
+		mp3Input.Close()
+		wavOutput.Close()
+	}()
+
+	return wavOutput, nextSong, false, fromAuto
+}
+
+func byteReader(r io.ReadCloser, ch chan []byte, bytesPerSecond int) chan bool {
+	if bytesPerSecond <= 0 {
+		bytesPerSecond = 2048
 	}
 
-	return nextSongChan, nextSong, false, fromAuto
+	done := make(chan bool)
+
+	go func() {
+		var err error
+		for err == nil {
+			dataPacket := make([]byte, bytesPerSecond)
+			for idx, n := 0, 0; idx < bytesPerSecond; idx += n {
+				readByte := make([]byte, 1)
+				n, err = r.Read(readByte)
+				copy(dataPacket[idx:idx+n], readByte)
+			}
+			ch <- dataPacket
+		}
+
+		done <- true
+	}()
+
+	return done
 }

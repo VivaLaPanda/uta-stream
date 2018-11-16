@@ -34,7 +34,7 @@ func NewQueue(aqEngine *auto.AQEngine, enableAutoq bool, ipfsUrl string) *Queue 
 }
 
 // Pop returns the audio resource next in the queue along with state flags.
-func (q *Queue) Pop() (song *resource.Song, songReader io.Reader, emptyq bool, fromAuto bool) {
+func (q *Queue) Pop() (song *resource.Song, songReader io.ReadCloser, emptyq bool, fromAuto bool) {
 	// If there is nothing to queue and we have autoq enabled,
 	// get from autoq. If autoq gives us an empty string (no audio to play)
 	// or autoq is off, return that the queue is empty

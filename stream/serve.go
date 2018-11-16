@@ -61,7 +61,7 @@ func generateNewStream(w http.ResponseWriter, req *http.Request) {
 		killConsumer <- consumerID
 	}()
 
-	for len(mediaConsumer) < 5 {
+	if len(mediaConsumer) < 2 {
 		time.Sleep(1 * time.Second)
 	}
 
@@ -78,7 +78,7 @@ func generateNewStream(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func ServeAudioOverHttp(inputAudio <-chan []byte, packetsPerSecond int, port int) {
+func ServeAudioOverHttp(inputAudio <-chan []byte, port int) {
 	/* Net listener */
 	n := "tcp"
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -119,7 +119,7 @@ func ServeAudioOverHttp(inputAudio <-chan []byte, packetsPerSecond int, port int
 			if catchupFrames > 0 {
 				catchupFrames -= 1
 			} else {
-				time.Sleep(time.Duration(1000/packetsPerSecond) * time.Millisecond)
+				time.Sleep(500 * time.Millisecond)
 			}
 
 			for _, consumer := range consumers {
