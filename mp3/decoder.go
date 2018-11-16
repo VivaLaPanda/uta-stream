@@ -22,7 +22,7 @@ func Mp3ToWav() (input io.WriteCloser, output io.ReadCloser, done *sync.WaitGrou
 		return nil, nil, nil, fmt.Errorf("ffmpeg was not found in PATH. Please install ffmpeg")
 	}
 
-	subProcess := exec.Command(ffmpeg, "-y", "-loglevel", "quiet", "-i", "pipe:0", "-f", "wav", "pipe:1")
+	subProcess := exec.Command(ffmpeg, "-y", "-loglevel", "quiet", "-i", "pipe:0", "-filter:a", "loudnorm", "-f", "wav", "pipe:1")
 	input, err = subProcess.StdinPipe()
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to pipe input into audio converter, err: %v", err)
