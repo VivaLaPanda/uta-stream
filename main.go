@@ -18,7 +18,7 @@ var authCfgFilename = flag.String("authCfgFilename", "", "Where to find auth con
 var ipfsUrl = flag.String("ipfsUrl", "localhost:5001", "The url of the local IPFS instance")
 var enableAutoq = flag.Bool("enableAutoq", true, "Whether to use autoq feature")
 var chainbreakProb = flag.Float64("chainbreakProb", .05, "Allows more random autoq")
-var bitrate = flag.Int("bitrate", 128, "Affects stream smoothness/synchro")
+var bitrate = flag.Int("bitrate", 160, "Affects stream smoothness/synchro")
 var autoQPrefixLen = flag.Int("autoQPrefixLen", 1, "Smaller = more random") // Large values will be random if the history is short
 var apiPort = flag.Int("apiPort", 8085, "Which port to serve the API on")
 var audioPort = flag.Int("audioPort", 9090, "Which port to serve the audio stream on")
