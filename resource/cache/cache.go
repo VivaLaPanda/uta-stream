@@ -143,7 +143,8 @@ func urlNormalize(rawUrl string) (normalizedUrl string, err error) {
 		values := parsedUrl.Query()
 		values.Del("list")
 		parsedUrl.RawQuery = values.Encode()
+		normalizedUrl = parsedUrl.String()
 	}
 
-	return parsedUrl.String(), nil
+	return normalizedUrl, nil
 }
