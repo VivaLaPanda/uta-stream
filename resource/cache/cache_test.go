@@ -71,6 +71,24 @@ func TestLoad(t *testing.T) {
 	}
 }
 
+func TestUrlNormalize(t *testing.T) {
+	testTable := []struct {
+		url      string
+		expected string
+	}{
+		{"https://youtu.be/nAwTw1aYy6M", "https://youtu.be/nAwTw1aYy6M"},
+		{"https://www.youtube.com/watch?v=JLpJPzKy6fY&feature=youtu.be", "https://youtu.be/JLpJPzKy6fY"},
+		{"http://youtube.com/watch?v=JLpJPzKy6fY", "https://youtu.be/JLpJPzKy6fY"},
+	}
+
+	for _, test := range testTable {
+		actual, err := urlNormalize(test.url)
+		if err != nil || actual != test.expected {
+			t.Errorf("Url normalization didn't produce expected result: E: %s, A: %s\n", test.expected, actual)
+		}
+	}
+}
+
 func TestLookup(t *testing.T) {
 	testUrl := "https://youtu.be/nAwTw1aYy6M"
 	testIpfsPath := "/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf"

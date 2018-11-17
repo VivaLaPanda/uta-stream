@@ -68,6 +68,7 @@ func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 			if mixer.currentSongData != nil {
 				// Take the current song and put it into the encoder
 				io.Copy(wavInput, mixer.currentSongData)
+				mixer.currentSongData.Close()
 
 				// We couldn't play from current, assume that the song ended
 				// Also, if we just recieved a skip, then we don't want to use that
@@ -146,7 +147,6 @@ func (m *Mixer) fetchNextSong() (
 	go func() {
 		io.Copy(mp3Input, nextSongReader)
 		mp3Input.Close()
-		wavOutput.Close()
 	}()
 
 	return wavOutput, nextSong, false, fromAuto
