@@ -107,11 +107,15 @@ func (c *Cache) Lookup(resourceID string, urgent bool, noDownload bool) (song *r
 		// Check the cache for the provided URL
 		cachedSong, exists := (*c.songMap)[url]
 
-		if !exists {
+		if !exists || cachedSong.IpfsPath() == "" || cachedSong.Title == "" {
 			if !noDownload {
 				song, err = download.Download(song, c.ipfs)
-				(*c.songMap)[url] = song
-				c.Write(c.cacheFilename)
+				if err == nil {
+					(*c.songMap)[url] = song
+					c.Write(c.cacheFilename)
+				} else {
+					return nil, err
+				}
 			}
 		} else {
 			song = cachedSong

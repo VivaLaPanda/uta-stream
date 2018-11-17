@@ -155,6 +155,8 @@ func queuer(q *queue.Queue, c *cache.Cache, qFunc QFunc) http.Handler {
 		// Otherwise go and fetch it
 		songToQueue, err := c.Lookup(resourceToQueue, q.IsEmpty(), false)
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintln(w, "{\"error\":\"failed to enqueue url.\"}")
 			log.Printf("Failed to enqueue song, err: %v", err)
 			return
 		}
