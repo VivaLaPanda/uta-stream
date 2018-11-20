@@ -17,8 +17,6 @@ import (
 func WavToMp3(bitrate int) (input io.WriteCloser, output io.ReadCloser, done *sync.WaitGroup, err error) {
 	// Ensure we have ffmpeg
 	ffmpeg, err := exec.LookPath("ffmpeg")
-	done = &sync.WaitGroup{}
-	done.Add(1)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("ffmpeg was not found in PATH. Please install ffmpeg")
 	}
@@ -36,6 +34,8 @@ func WavToMp3(bitrate int) (input io.WriteCloser, output io.ReadCloser, done *sy
 	}
 	subProcess.Stderr = os.Stderr
 
+	done = &sync.WaitGroup{}
+	done.Add(1)
 	if err = subProcess.Start(); err != nil { //Use start, not run
 		return nil, nil, nil, fmt.Errorf("failed to start conversion, err: %v", err)
 	}
@@ -43,18 +43,10 @@ func WavToMp3(bitrate int) (input io.WriteCloser, output io.ReadCloser, done *sy
 	go func() {
 		err := subProcess.Wait()
 		if err != nil {
-			// TODO: Handle this better
-			// This error case will likely cause a panic somewhere
 			log.Printf("ffmpeg encountered an error while encoding: %v\n", err)
 		}
 		done.Done()
 	}()
-	//if err = cmd.Run(); err != nil {
-	//	fmt.Println("Failed to extract audio:", err)
-	//	return "", err
-	//} else {
-	//	fmt.Println("Extracted audio:", mp3Filename)
-	//}
 
 	return input, output, done, nil
 }

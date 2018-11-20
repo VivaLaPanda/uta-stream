@@ -64,21 +64,6 @@ func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 	// also handle song transitions
 	go func() {
 		for {
-			// Check if we even have anything to try and play
-			if mixer.currentSongData != nil {
-				// Take the current song and put it into the encoder
-				io.Copy(wavInput, mixer.currentSongData)
-				mixer.currentSongData.Close()
-
-				// We couldn't play from current, assume that the song ended
-				// Also, if we just recieved a skip, then we don't want to use that
-				// song to train qutoq
-				if mixer.CurrentSongInfo.IpfsPath() != "" {
-					mixer.queue.NotifyDone(mixer.CurrentSongInfo.IpfsPath(), mixer.learnFrom)
-					mixer.learnFrom = true
-				}
-			}
-
 			// Get the next song channel and associated metadata
 			// Start broadcasting right away and set some flags/state values
 			tempSong, tempPath, isEmpty, fromAuto := mixer.fetchNextSong()
@@ -88,6 +73,19 @@ func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 				mixer.CurrentSongInfo = tempPath
 			} else {
 				time.Sleep(2 * time.Second)
+			}
+
+			// Check if we even have anything to try and play
+			if mixer.currentSongData != nil {
+				// Take the current song and put it into the encoder
+				io.Copy(wavInput, mixer.currentSongData)
+				// We couldn't play from current, assume that the song ended
+				// Also, if we just recieved a skip, then we don't want to use that
+				// song to train qutoq
+				if mixer.CurrentSongInfo.IpfsPath() != "" {
+					mixer.queue.NotifyDone(mixer.CurrentSongInfo.IpfsPath(), mixer.learnFrom)
+					mixer.learnFrom = true
+				}
 			}
 		}
 	}()
@@ -146,6 +144,7 @@ func (m *Mixer) fetchNextSong() (
 	// Start converting the mp3 data to wav
 	go func() {
 		io.Copy(mp3Input, nextSongReader)
+		nextSongReader.Close()
 		mp3Input.Close()
 	}()
 

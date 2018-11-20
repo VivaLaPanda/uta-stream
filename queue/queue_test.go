@@ -92,3 +92,70 @@ func TestPlayNext(t *testing.T) {
 	cleanup(autoqTestfile)
 	cleanup(cacheFile)
 }
+
+func TestIsEmpty(t *testing.T) {
+	autoqTestfile := "autoqTestIsEmpty.test"
+	// Make sure the q starts empty
+	c := cache.NewCache(cacheFile, "localhost:5001")
+	a := auto.NewAQEngine(autoqTestfile, c, 0, 1)
+	q := NewQueue(a, false, "localhost:5001")
+	if q.IsEmpty() == false {
+		t.Errorf("Queue didn't start empty. isEmpty was false.\n")
+		return
+	}
+
+	q.PlayNext(testSongB)
+	if q.IsEmpty() == true {
+		t.Errorf("Queue still reporting empty after enqueue.\n")
+		return
+	}
+
+	cleanup(autoqTestfile)
+	cleanup(cacheFile)
+}
+
+func TestDump(t *testing.T) {
+	autoqTestfile := "autoqTestDump.test"
+	// Make sure the q starts empty
+	c := cache.NewCache(cacheFile, "localhost:5001")
+	a := auto.NewAQEngine(autoqTestfile, c, 0, 1)
+	q := NewQueue(a, false, "localhost:5001")
+
+	q.PlayNext(testSongB)
+	q.PlayNext(testSongB)
+	q.PlayNext(testSongB)
+	q.PlayNext(testSongB)
+
+	q.Dump()
+
+	if q.IsEmpty() == false {
+		t.Errorf("Queue not reporting empty after dump.\n")
+		return
+	}
+
+	cleanup(autoqTestfile)
+	cleanup(cacheFile)
+}
+
+func TestGetQueue(t *testing.T) {
+	autoqTestfile := "autoqTestGetQueue.test"
+	// Make sure the q starts empty
+	c := cache.NewCache(cacheFile, "localhost:5001")
+	a := auto.NewAQEngine(autoqTestfile, c, 0, 1)
+	q := NewQueue(a, false, "localhost:5001")
+
+	q.PlayNext(testSongA)
+	q.PlayNext(testSongA)
+	q.PlayNext(testSongA)
+	q.PlayNext(testSongA)
+
+	songs := q.GetQueue()
+
+	if songs[0].ResourceID() != "/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf" {
+		t.Errorf("GetQueue didn't give us the song we put in. Output: %v\n", songs[0])
+		return
+	}
+
+	cleanup(autoqTestfile)
+	cleanup(cacheFile)
+}

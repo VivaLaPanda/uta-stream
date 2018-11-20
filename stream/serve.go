@@ -61,10 +61,6 @@ func generateNewStream(w http.ResponseWriter, req *http.Request) {
 		killConsumer <- consumerID
 	}()
 
-	if len(mediaConsumer) < 2 {
-		time.Sleep(1 * time.Second)
-	}
-
 	// Recive bytes from the channel and respond with them
 	var err error
 	for bytesToStream := range mediaConsumer {

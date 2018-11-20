@@ -3,6 +3,7 @@ package mp3
 import (
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"sync"
@@ -16,8 +17,6 @@ import (
 func Mp3ToWav() (input io.WriteCloser, output io.ReadCloser, done *sync.WaitGroup, err error) {
 	// Ensure we have ffmpeg
 	ffmpeg, err := exec.LookPath("ffmpeg")
-	done = &sync.WaitGroup{}
-	done.Add(1)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("ffmpeg was not found in PATH. Please install ffmpeg")
 	}
@@ -33,20 +32,19 @@ func Mp3ToWav() (input io.WriteCloser, output io.ReadCloser, done *sync.WaitGrou
 	}
 	subProcess.Stderr = os.Stderr
 
+	done = &sync.WaitGroup{}
+	done.Add(1)
 	if err = subProcess.Start(); err != nil { //Use start, not run
 		return nil, nil, nil, fmt.Errorf("failed to start conversion, err: %v", err)
 	}
 
 	go func() {
-		subProcess.Wait()
+		err := subProcess.Wait()
+		if err != nil {
+			log.Printf("ffmpeg encountered an error while encoding: %v\n", err)
+		}
 		done.Done()
 	}()
-	//if err = cmd.Run(); err != nil {
-	//	fmt.Println("Failed to extract audio:", err)
-	//	return "", err
-	//} else {
-	//	fmt.Println("Extracted audio:", mp3Filename)
-	//}
 
 	return input, output, done, nil
 }
