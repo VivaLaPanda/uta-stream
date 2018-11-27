@@ -112,17 +112,19 @@ func (c *Cache) Lookup(resourceID string, urgent bool, noDownload bool) (song *r
 			if !noDownload {
 				song, err = download.Download(song, c.ipfs)
 				// Don't store it into the cache until we have an IPFS path for it
-				go func() {
-					for {
-						if song.IpfsPath() != "" {
-							(*c.songMap)[url] = song
-							c.Write(c.cacheFilename)
-							return
-						} else {
-							time.Sleep(20 * time.Second)
+				if err == nil {
+					go func() {
+						for {
+							if song.IpfsPath() != "" {
+								(*c.songMap)[url] = song
+								c.Write(c.cacheFilename)
+								return
+							} else {
+								time.Sleep(20 * time.Second)
+							}
 						}
-					}
-				}()
+					}()
+				}
 			}
 		} else {
 			song = cachedSong

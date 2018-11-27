@@ -82,10 +82,8 @@ func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 				// We couldn't play from current, assume that the song ended
 				// Also, if we just recieved a skip, then we don't want to use that
 				// song to train qutoq
-				if mixer.CurrentSongInfo.IpfsPath() != "" {
-					mixer.queue.NotifyDone(mixer.CurrentSongInfo.IpfsPath(), mixer.learnFrom)
-					mixer.learnFrom = true
-				}
+				mixer.queue.NotifyDone(mixer.CurrentSongInfo.IpfsPath(), mixer.learnFrom)
+				mixer.learnFrom = true
 			}
 		}
 	}()

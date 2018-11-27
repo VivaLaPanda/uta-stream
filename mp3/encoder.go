@@ -23,7 +23,7 @@ func WavToMp3(bitrate int) (input io.WriteCloser, output io.ReadCloser, done *sy
 
 	bitrateString := fmt.Sprintf("%dk", bitrate)
 
-	subProcess := exec.Command(ffmpeg, "-y", "-loglevel", "quiet", "-i", "pipe:0", "-filter:a", "loudnorm", "-b:a", bitrateString, "-f", "mp3", "pipe:1")
+	subProcess := exec.Command(ffmpeg, "-y", "-loglevel", "fatal", "-i", "pipe:0", "-filter:a", "loudnorm", "-b:a", bitrateString, "-f", "mp3", "pipe:1")
 	input, err = subProcess.StdinPipe()
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to pipe input into audio converter, err: %v", err)
