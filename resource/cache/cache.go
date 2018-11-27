@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/VivaLaPanda/uta-stream/resource"
 	"github.com/VivaLaPanda/uta-stream/resource/download"
@@ -107,15 +108,21 @@ func (c *Cache) Lookup(resourceID string, urgent bool, noDownload bool) (song *r
 		// Check the cache for the provided URL
 		cachedSong, exists := (*c.songMap)[url]
 
-		if !exists || cachedSong.IpfsPath() == "" || cachedSong.Title == "" {
+		if !exists {
 			if !noDownload {
 				song, err = download.Download(song, c.ipfs)
-				if err == nil {
-					(*c.songMap)[url] = song
-					c.Write(c.cacheFilename)
-				} else {
-					return nil, err
-				}
+				// Don't store it into the cache until we have an IPFS path for it
+				go func() {
+					for {
+						if song.IpfsPath() != "" {
+							(*c.songMap)[url] = song
+							c.Write(c.cacheFilename)
+							return
+						} else {
+							time.Sleep(20 * time.Second)
+						}
+					}
+				}()
 			}
 		} else {
 			song = cachedSong
