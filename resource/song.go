@@ -136,6 +136,13 @@ func (s *Song) Resolve(ipfs *shell.Shell) (reader io.ReadCloser, err error) {
 		return s.reader, nil
 	} else if s.ipfsPath != "" {
 		return ipfs.Cat(s.ipfsPath)
+	} else if s.DLResult == nil {
+		// We don't have an IPFS path or a reader, which means we haven't been downloaded
+		// This should only be the result of a messed up cache.
+		buf := buffer.New(bufferSize * 1024) // In memory Buffer
+		s.reader, s.Writer = nio.Pipe(buf)
+		s, err = download.Download(s, ipfs)
+		return s.reader, nil
 	}
 
 	// We need to play the song but aren't ready, block until the DL is finished
