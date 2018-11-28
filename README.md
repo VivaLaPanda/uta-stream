@@ -13,7 +13,7 @@ Core features:
 
 ## Installing
 * Install IPFS (https://ipfs.io/) and start daemon
-* Install ffmpeg in your PATH
+* Install ffmpeg in your PATH (make sure it's a version new enough to support loudnorm filter)
 * `go get github.com/VivaLaPanda/uta-stream`
 
 ## Contributing
