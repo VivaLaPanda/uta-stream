@@ -51,7 +51,8 @@ func (q *Queue) Pop() (song *resource.Song, songReader io.ReadCloser, emptyq boo
 			// killing the server. Fix this.
 			songReader, err = song.Resolve(q.ipfs)
 			if err != nil {
-				log.Printf("Issue when resolving song. Err: %v\n", err)
+				songData, _ := song.MarshalJSON()
+				log.Printf("Issue when resolving song (%s). Err: %v\n", songData, err)
 				return nil, nil, true, fromAuto
 			}
 
