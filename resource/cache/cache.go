@@ -93,18 +93,18 @@ func (c *Cache) Load(filename string) error {
 // UrlCacheLookup will check the cache for the provided url, but on a cache miss
 // it will download the resource and add it to the cache, then return the hash
 func (c *Cache) Lookup(resourceID string, urgent bool, noDownload bool) (song *resource.Song, err error) {
+	// normalize
+	resourceID, err = urlNormalize(resourceID)
+	if err != nil {
+		return nil, fmt.Errorf("Provided resource is an unrecognized format: %v. \nErr: %v", resourceID, err)
+	}
 	song, err = resource.NewSong(resourceID, urgent)
 	if err != nil {
 		return nil, err
 	}
 
 	if !resource.IsIpfs(resourceID) {
-		// normalize
-		url, err := urlNormalize(resourceID)
-		if err != nil {
-			return nil, fmt.Errorf("Provided resource doesn't appear to be a link: %v. \nErr: %v", url, err)
-		}
-
+		url := resourceID
 		// Check the cache for the provided URL
 		cachedSong, exists := (*c.songMap)[url]
 
@@ -112,17 +112,20 @@ func (c *Cache) Lookup(resourceID string, urgent bool, noDownload bool) (song *r
 			if !noDownload {
 				song, err = download.Download(song, c.ipfs)
 				// Don't store it into the cache until we have an IPFS path for it
-				go func() {
-					for {
-						if song.IpfsPath() != "" {
-							(*c.songMap)[url] = song
-							c.Write(c.cacheFilename)
-							return
-						} else {
-							time.Sleep(20 * time.Second)
+				if err == nil {
+					go func() {
+						// TODO: This will never stop if the DL errors
+						for {
+							if song.IpfsPath() != "" {
+								(*c.songMap)[url] = song
+								c.Write(c.cacheFilename)
+								return
+							} else {
+								time.Sleep(20 * time.Second)
+							}
 						}
-					}
-				}()
+					}()
+				}
 			}
 		} else {
 			song = cachedSong
@@ -131,9 +134,10 @@ func (c *Cache) Lookup(resourceID string, urgent bool, noDownload bool) (song *r
 		// TODO: This is potentially horribly slow. Find a better way.
 		for _, value := range *c.songMap {
 			if song.IpfsPath() == value.IpfsPath() {
-				song = value
+				return value, nil
 			}
 		}
+		song, _ = resource.NewSong("http://ipfs.io"+song.IpfsPath(), false)
 	}
 
 	return song, nil
@@ -141,6 +145,10 @@ func (c *Cache) Lookup(resourceID string, urgent bool, noDownload bool) (song *r
 
 // Try and normalize URLs to reduce duplication in resource cache
 func urlNormalize(rawUrl string) (normalizedUrl string, err error) {
+	if resource.IsIpfs(rawUrl) {
+		return rawUrl, nil
+	}
+
 	parsedUrl, err := url.Parse(rawUrl)
 	if err != nil {
 		return "", err

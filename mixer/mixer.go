@@ -84,8 +84,8 @@ func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 				// song to train qutoq
 				if mixer.CurrentSongInfo.IpfsPath() != "" {
 					mixer.queue.NotifyDone(mixer.CurrentSongInfo.IpfsPath(), mixer.learnFrom)
-					mixer.learnFrom = true
 				}
+				mixer.learnFrom = true
 			}
 		}
 	}()
