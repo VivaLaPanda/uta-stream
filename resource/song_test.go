@@ -40,7 +40,7 @@ func TestJson(t *testing.T) {
 		t.Errorf("failed to unmarshal JSON. Err: %s", err)
 	}
 
-	if testSongA.Url().String() != testSongB.Url().String() {
+	if testSongA.URL().String() != testSongB.URL().String() {
 		t.Errorf("url changed after JSON marshal and unmarshal.\n")
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"sync"
 	"time"
 
 	shell "github.com/ipfs/go-ipfs-api"
@@ -15,14 +16,16 @@ import (
 var bufferSize int64 = 10000 //kb
 
 type Song struct {
-	ipfsPath  string `json:"currentSong"`
-	url       *url.URL
-	Title     string
-	Duration  time.Duration
-	DLResult  chan string
-	DLFailure chan error
-	reader    io.ReadCloser
-	Writer    io.WriteCloser
+	ipfsPath      string `json:"currentSong"`
+	url           *url.URL
+	Title         string
+	Duration      time.Duration
+	DLResult      chan string
+	DLFailure     chan error
+	reader        io.ReadCloser
+	Writer        io.WriteCloser
+	resolved      *sync.WaitGroup
+	resolutionErr error
 }
 
 func NewSong(resourceID string, hotwriter bool) (song *Song, err error) {
@@ -33,6 +36,7 @@ func NewSong(resourceID string, hotwriter bool) (song *Song, err error) {
 		Duration:  0,
 		DLResult:  make(chan string, 1),
 		DLFailure: make(chan error, 1),
+		resolved:  &sync.WaitGroup{},
 	}
 
 	if IsIpfs(resourceID) {
@@ -49,25 +53,29 @@ func NewSong(resourceID string, hotwriter bool) (song *Song, err error) {
 		song.reader, song.Writer = nio.Pipe(buf)
 	}
 
+	// Start making sure the song is playable
+	song.resolved.Add(1)
+	go song.resolver()
+
 	return song, nil
 }
 
 func (s *Song) MarshalJSON() ([]byte, error) {
 	var rawURL string
-	if s.Url() != nil {
-		rawURL = s.Url().String()
+	if s.URL() != nil {
+		rawURL = s.URL().String()
 	} else {
 		rawURL = ""
 	}
 
 	return json.Marshal(&struct {
 		IpfsPath string        `json:"ipfsPath"`
-		Url      string        `json:"url"`
+		URL      string        `json:"url"`
 		Title    string        `json:"title"`
 		Duration time.Duration `json:"duration"`
 	}{
 		IpfsPath: s.IpfsPath(),
-		Url:      rawURL,
+		URL:      rawURL,
 		Title:    s.Title,
 		Duration: s.Duration,
 	})
@@ -76,7 +84,7 @@ func (s *Song) MarshalJSON() ([]byte, error) {
 func (s *Song) UnmarshalJSON(data []byte) error {
 	aux := &struct {
 		IpfsPath string        `json:"ipfsPath"`
-		Url      string        `json:"url"`
+		URL      string        `json:"url"`
 		Title    string        `json:"title"`
 		Duration time.Duration `json:"duration"`
 	}{}
@@ -84,12 +92,24 @@ func (s *Song) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
+	// Sane defaults
+	if aux.URL == "" {
+		aux.URL = "https://ipfs.io" + aux.IpfsPath
+	}
+	if aux.Title == "" {
+		aux.Title = "Unknown Track"
+	}
+
+	// Construct the song
 	s.ipfsPath = aux.IpfsPath
 	s.Title = aux.Title
 	s.Duration = aux.Duration
 	var err error
-	if s.url, err = url.Parse(aux.Url); err != nil {
+	if s.url, err = url.Parse(aux.URL); err != nil {
 		s.url = nil
+	}
+	if s.resolved == nil {
+		s.resolved = &sync.WaitGroup{}
 	}
 
 	return nil
@@ -116,37 +136,47 @@ func (s *Song) IpfsPath() string {
 	return s.ipfsPath
 }
 
-func (s *Song) Url() *url.URL {
+func (s *Song) URL() *url.URL {
 	return s.url
 }
 
-func (s *Song) Resolve(ipfs *shell.Shell) (reader io.ReadCloser, err error) {
+func (s *Song) resolver() {
+	defer s.resolved.Done()
+
+	if s.reader != nil {
+		return
+	} else if s.ipfsPath != "" {
+		return
+	} else if s.DLResult == nil {
+		s.resolutionErr = fmt.Errorf("song was cached without download hash")
+		return
+	}
+
 	// Check to see if we had a DL we were waiting on, if so store the result
 	select {
-	case err = <-s.DLFailure:
-		return nil, err
+	case s.resolutionErr = <-s.DLFailure:
+		return
 	case s.ipfsPath = <-s.DLResult:
-	default:
-		// default case so we move on if we don't have anything to recieve
+		return
 	}
+}
+
+// Resolve works sort of like a js Observable, in that n callers will wait
+// until the song is resolved, and then all get the same data.
+func (s *Song) Resolve(ipfs *shell.Shell) (reader io.ReadCloser, err error) {
+	s.resolved.Wait()
 
 	// If we have a reader from the DL, that's the priority, otherwise return the
 	// ipfs reader if we can
-	if s.reader != nil {
+	if s.resolutionErr != nil {
+		return nil, s.resolutionErr
+	} else if s.reader != nil {
 		return s.reader, nil
 	} else if s.ipfsPath != "" {
 		return ipfs.Cat(s.ipfsPath)
-	} else if s.DLResult == nil {
-		return nil, fmt.Errorf("song was cached without download hash")
 	}
 
-	// We need to play the song but aren't ready, block until the DL is finished
-	select {
-	case s.ipfsPath = <-s.DLResult:
-		return ipfs.Cat(s.ipfsPath)
-	case err = <-s.DLFailure:
-		return nil, err
-	}
+	return nil, fmt.Errorf("Song in an unknown state: %v", s)
 }
 
 func (s *Song) CheckFailure() (err error) {

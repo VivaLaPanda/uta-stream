@@ -153,7 +153,7 @@ func queuer(q *queue.Queue, c *cache.Cache, qFunc QFunc) http.Handler {
 
 		// If we're looking at an ipfs path just leave as is
 		// Otherwise go and fetch it
-		songToQueue, err := c.Lookup(resourceToQueue, q.IsEmpty(), false)
+		songToQueue, err := c.Lookup(resourceToQueue, q.IsEmpty())
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintln(w, "{\"error\":\"failed to enqueue url.\"}")

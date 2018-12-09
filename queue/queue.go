@@ -126,7 +126,7 @@ func (q *Queue) GetQueue() []*resource.Song {
 	for idx, elem := range q.fifo {
 		err := elem.CheckFailure()
 		if err != nil {
-			log.Printf("Song %s had a download error: %s", elem.Url(), err)
+			log.Printf("Song %s had a download error: %s", elem.URL(), err)
 			indexesToDelete = append(indexesToDelete, idx)
 		}
 	}

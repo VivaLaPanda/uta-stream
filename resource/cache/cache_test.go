@@ -3,6 +3,7 @@ package cache
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/VivaLaPanda/uta-stream/resource"
 	shell "github.com/ipfs/go-ipfs-api"
@@ -84,7 +85,7 @@ func TestUrlNormalize(t *testing.T) {
 	for _, test := range testTable {
 		actual, err := urlNormalize(test.url)
 		if err != nil || actual != test.expected {
-			t.Errorf("Url normalization didn't produce expected result: E: %s, A: %s\n", test.expected, actual)
+			t.Errorf("URL normalization didn't produce expected result: E: %s, A: %s\n", test.expected, actual)
 		}
 	}
 }
@@ -99,19 +100,21 @@ func TestLookup(t *testing.T) {
 	ipfs := shell.NewShell(ipfsUrl)
 
 	// Lookup the url, the result shouldn't be able to find the IPFS url right away
-	song, _ := c.Lookup(testUrl, false, false)
+	song, _ := c.Lookup(testUrl, false)
 	if resourceID := song.ResourceID(); resourceID != testUrl {
 		t.Errorf("cache lookup resulted in incorrect resourceID")
 	}
 
 	// Block until we're done with the DL
 	_, _ = song.Resolve(ipfs)
-	song, _ = c.Lookup(testUrl, false, false)
+	// Avodiing tiny race condition where cache lookup right after resolve might fail
+	time.Sleep(500 * time.Millisecond)
+	song, _ = c.Lookup(testUrl, false)
 	if resourceID := song.ResourceID(); resourceID != testIpfsPath {
 		t.Errorf("cache didn't find url even after it should have stored")
 	}
 
-	song, _ = c.Lookup(testIpfsPath, false, false)
+	song, _ = c.Lookup(testIpfsPath, false)
 	if resourceID := song.ResourceID(); resourceID != testIpfsPath {
 		t.Errorf("cache lookup resulted in incorrect resourceID")
 	}

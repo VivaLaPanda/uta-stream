@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"time"
 
 	"github.com/VivaLaPanda/uta-stream/resource"
 	"github.com/VivaLaPanda/uta-stream/resource/download"
@@ -92,8 +91,8 @@ func (c *Cache) Load(filename string) error {
 
 // UrlCacheLookup will check the cache for the provided url, but on a cache miss
 // it will download the resource and add it to the cache, then return the hash
-func (c *Cache) Lookup(resourceID string, urgent bool, noDownload bool) (song *resource.Song, err error) {
-	// normalize
+func (c *Cache) Lookup(resourceID string, urgent bool) (song *resource.Song, err error) {
+	// normalize and create default song to store data in
 	resourceID, err = urlNormalize(resourceID)
 	if err != nil {
 		return nil, fmt.Errorf("Provided resource is an unrecognized format: %v. \nErr: %v", resourceID, err)
@@ -109,38 +108,37 @@ func (c *Cache) Lookup(resourceID string, urgent bool, noDownload bool) (song *r
 		cachedSong, exists := (*c.songMap)[url]
 
 		if !exists {
-			if !noDownload {
-				song, err = download.Download(song, c.ipfs)
-				// Don't store it into the cache until we have an IPFS path for it
-				if err == nil {
-					go func() {
-						// TODO: This will never stop if the DL errors
-						for {
-							if song.IpfsPath() != "" {
-								(*c.songMap)[url] = song
-								c.Write(c.cacheFilename)
-								return
-							} else {
-								time.Sleep(20 * time.Second)
-							}
-						}
-					}()
-				}
-			}
+			return c.handleUncachedUrl(song, url, c.ipfs)
 		} else {
 			song = cachedSong
 		}
 	} else {
-		// TODO: This is potentially horribly slow. Find a better way.
+		// Search for the song
 		for _, value := range *c.songMap {
 			if song.IpfsPath() == value.IpfsPath() {
 				return value, nil
 			}
 		}
-		song, _ = resource.NewSong("http://ipfs.io"+song.IpfsPath(), false)
 	}
 
 	return song, nil
+}
+
+func (c *Cache) handleUncachedUrl(song *resource.Song, url string, ipfs *shell.Shell) (*resource.Song, error) {
+	song, err := download.Download(song, ipfs)
+	if err != nil {
+		return song, err
+	}
+
+	// Cache the song once we've resolved it into a playable resource
+	go func() {
+		_, err = song.Resolve(ipfs)
+
+		(*c.songMap)[url] = song
+		c.Write(c.cacheFilename)
+	}()
+
+	return song, err
 }
 
 // Try and normalize URLs to reduce duplication in resource cache

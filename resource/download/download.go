@@ -30,18 +30,18 @@ func Download(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error) {
 	}
 
 	// Route to different handlers based on hostname
-	switch song.Url().Hostname() {
+	switch song.URL().Hostname() {
 	case "youtu.be":
 		return downloadYoutube(song, ipfs)
 	default:
 		return song, fmt.Errorf("URL hostname (%v) doesn't match a known provider.\n"+
-			"Should be one of: %v\n", song.Url().Hostname(), knownProviders)
+			"Should be one of: %v\n", song.URL().Hostname(), knownProviders)
 	}
 }
 
 func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error) {
 	// Get the info for the video
-	vidInfo, err := ytdl.GetVideoInfoFromShortURL(song.Url())
+	vidInfo, err := ytdl.GetVideoInfoFromShortURL(song.URL())
 	if err != nil {
 		return song, fmt.Errorf("failed to fetch provided Youtube url. Err: %v", err)
 	}
@@ -77,20 +77,20 @@ func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, er
 	// Download the mp4 into the converter
 	dlError := make(chan error)
 	go func() {
-		log.Printf("Downloading mp4 from %v\n", song.Url().String())
+		log.Printf("Downloading mp4 from %v\n", song.URL().String())
 		err = vidInfo.Download(bestFormat, convInput)
 		defer convInput.Close()
 		if err != nil {
 			dlError <- fmt.Errorf("ytdl encountered an error: %v\n", err)
 			return
 		}
-		log.Printf("Downloading of %v complete\n", song.Url().String())
+		log.Printf("Downloading of %v complete\n", song.URL().String())
 		dlError <- nil
 	}()
 
 	// Read from converter and write to the file and potentially the provided hotWriter
 	go func() {
-		log.Printf("Converting %s mp4 to mp3\n", song.Url().String())
+		log.Printf("Converting %s mp4 to mp3\n", song.URL().String())
 		var sharedReader io.Reader
 		bufStreamData := bufio.NewWriter(song.Writer)
 		if song.Writer != nil {
@@ -100,7 +100,7 @@ func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, er
 		}
 
 		io.Copy(mp3File, sharedReader)
-		log.Printf("Conversion of %s to mp3 complete\n", song.Url().String())
+		log.Printf("Conversion of %s to mp3 complete\n", song.URL().String())
 		convOutput.Close()
 		if song.Writer != nil {
 			bufStreamData.Flush()
@@ -114,7 +114,7 @@ func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, er
 		// BLock until DL finishes, nil for success, else will be an error
 		err := <-dlError
 		if err != nil {
-			song.DLFailure <- fmt.Errorf("failed to download %s. Err: %v\n", song.Url().String(), err)
+			song.DLFailure <- fmt.Errorf("failed to download %s. Err: %v\n", song.URL().String(), err)
 			return
 		}
 
@@ -124,14 +124,14 @@ func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, er
 		// Add to ipfs
 		ipfsPath, err := addToIpfs(fileLocation, ipfs)
 		if err != nil {
-			song.DLFailure <- fmt.Errorf("failed to add %s to IPFS. Err: %v\n", song.Url().String(), err)
+			song.DLFailure <- fmt.Errorf("failed to add %s to IPFS. Err: %v\n", song.URL().String(), err)
 			return
 		}
 		song.DLResult <- ipfsPath
 
 		// Remove the mp3 now that we've added
 		if err = os.Remove(fileLocation); err != nil {
-			log.Printf("Failed to remove mp3 for %s. Err: %v\n", song.Url().String(), err)
+			log.Printf("Failed to remove mp3 for %s. Err: %v\n", song.URL().String(), err)
 		}
 	}()
 

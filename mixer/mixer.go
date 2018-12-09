@@ -135,7 +135,7 @@ func (m *Mixer) fetchNextSong() (
 		return nil, nextSong, true, fromAuto
 	}
 
-	// Get MP3 reader
+	// Get MP3 reader. This should have a timeout eventually
 	nextSong, nextSongReader, isEmpty, fromAuto := m.queue.Pop()
 	if isEmpty {
 		return nil, nextSong, true, fromAuto

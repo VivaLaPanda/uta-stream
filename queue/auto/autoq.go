@@ -99,7 +99,7 @@ func (q *AQEngine) Load(filename string) error {
 
 // Vpop simply returns the next song according to the Markov chain
 func (q *AQEngine) Vpop() (*resource.Song, error) {
-	return q.cache.Lookup(q.markovChain.generate(), false, true)
+	return q.cache.Lookup(q.markovChain.generate(), false)
 }
 
 // The interface for external callers to add to the markov chain
