@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/VivaLaPanda/uta-stream/queue/auto"
 	"github.com/VivaLaPanda/uta-stream/resource"
@@ -25,12 +26,15 @@ type Queue struct {
 // attached. enableAutoq will determine whether a Pop will attempt to fetch
 // from the autoq.
 func NewQueue(aqEngine *auto.AQEngine, enableAutoq bool, ipfsUrl string) *Queue {
-	return &Queue{
+	q := &Queue{
 		lock:         &sync.Mutex{},
 		autoq:        aqEngine,
 		AutoqEnabled: enableAutoq,
 		ipfs:         shell.NewShell(ipfsUrl),
 	}
+	q.ipfs.SetTimeout(time.Minute * 15)
+
+	return q
 }
 
 // Pop returns the audio resource next in the queue along with state flags.

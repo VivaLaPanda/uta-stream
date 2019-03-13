@@ -29,6 +29,8 @@ type Mixer struct {
 	learnFrom       bool
 }
 
+var bufferSize int64 = 10000 //kb
+
 // NewMixer will return a mixer struct. Said struct will have the provided queue
 // attached for internal use. The Output channel is public, and the only way
 // consume the mixer's output. You are also provided the Current song path so you
@@ -123,32 +125,18 @@ func (m *Mixer) Pause() {
 
 // Will go to queue and get the next track and associated metadata
 func (m *Mixer) fetchNextSong() (
-	wavOutput io.ReadCloser,
+	mp3Reader io.ReadCloser,
 	nextSong *resource.Song,
 	isEmpty bool,
 	fromAuto bool) {
 
-	// Prep mp3 -> wav/pcm converter
-	mp3Input, wavOutput, _, err := mp3.Mp3ToWav()
-	if err != nil {
-		log.Printf("Failed to decode song (%v). Err: %v\n", nextSong, err)
-		return nil, nextSong, true, fromAuto
-	}
-
-	// Get MP3 reader. This should have a timeout eventually
+	// Get MP3 reader.
 	nextSong, nextSongReader, isEmpty, fromAuto := m.queue.Pop()
 	if isEmpty {
 		return nil, nextSong, true, fromAuto
 	}
 
-	// Start converting the mp3 data to wav
-	go func() {
-		io.Copy(mp3Input, nextSongReader)
-		nextSongReader.Close()
-		mp3Input.Close()
-	}()
-
-	return wavOutput, nextSong, false, fromAuto
+	return nextSongReader, nextSong, false, fromAuto
 }
 
 func byteReader(r io.ReadCloser, ch chan []byte, bytesPerSecond int) chan bool {
