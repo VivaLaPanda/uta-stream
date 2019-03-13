@@ -7,16 +7,25 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/VivaLaPanda/uta-stream/resource"
 	shell "github.com/ipfs/go-ipfs-api"
 	"github.com/rylio/ytdl"
+	"github.com/yanatan16/golang-soundcloud/soundcloud"
 )
 
 var knownProviders = [...]string{"youtube.com", "youtu.be"}
 var tempDLFolder = "TEMP-DL"
+
+var api = &soundcloud.Api{
+	ClientId: "LvWovRaJZlWCHql0bISuum8Bd2KX79mb",
+}
 
 // Master download router. Looks at the url and determins which service needs
 // to hand the url. hotWriter is used to allow for playing the audio
@@ -33,6 +42,8 @@ func Download(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error) {
 	switch song.URL().Hostname() {
 	case "youtu.be":
 		return downloadYoutube(song, ipfs)
+	case "soundcloud.com":
+		return downloadSoundcloud(song, ipfs)
 	default:
 		return song, fmt.Errorf("URL hostname (%v) doesn't match a known provider.\n"+
 			"Should be one of: %v\n", song.URL().Hostname(), knownProviders)
@@ -120,6 +131,100 @@ func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, er
 
 		// Wait for convert to finish
 		convProgress.Wait()
+
+		// Add to ipfs
+		ipfsPath, err := addToIpfs(fileLocation, ipfs)
+		if err != nil {
+			song.DLFailure <- fmt.Errorf("failed to add %s to IPFS. Err: %v\n", song.URL().String(), err)
+			return
+		}
+		song.DLResult <- ipfsPath
+
+		// Remove the mp3 now that we've added
+		if err = os.Remove(fileLocation); err != nil {
+			log.Printf("Failed to remove mp3 for %s. Err: %v\n", song.URL().String(), err)
+		}
+	}()
+
+	return song, nil
+}
+
+func downloadSoundcloud(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error) {
+	res, err := api.Resolve(song.URL().String())
+	if err != nil {
+		return song, fmt.Errorf("failed to resolve song url. Err: %v", err)
+	}
+
+	rawID := strings.Replace(
+		filepath.Base(res.Path),
+		".json",
+		"",
+		-1,
+	)
+	trackID, err := strconv.Atoi(rawID)
+	if err != nil {
+		return song, fmt.Errorf("failed to create resolve song ID. Err: %v", err)
+	}
+	trackApi := api.Track(uint64(trackID))
+	track, err := trackApi.Get(url.Values{})
+	if err != nil {
+		return song, fmt.Errorf("failed to get . Err: %v", err)
+	}
+
+	// Prepare the mp3 file we'll write to
+	fileLocation := filepath.Join(tempDLFolder, rawID+".mp3")
+	_ = os.MkdirAll(filepath.Dir(fileLocation), os.ModePerm)
+	mp3File, err := os.Create(fileLocation)
+	if err != nil {
+		return song, fmt.Errorf("failed to create mp3 file. Err: %v", err)
+	}
+
+	// Download the mp4 into the converter
+	dlError := make(chan error)
+	go func() {
+		log.Printf("Downloading mp3 from %v\n", song.URL().String())
+
+		// Open up the reader against the soundcloud endpoint
+		resp, err := http.Get(track.DownloadUrl + "?client_id=" + api.ClientId)
+		if err != nil {
+			dlError <- fmt.Errorf("soundcloud DL failed to start DL: %v\n", err)
+			return
+		}
+
+		// split the reader if necessary
+		var sharedReader io.Reader
+		bufStreamData := bufio.NewWriter(song.Writer)
+		if song.Writer != nil {
+			sharedReader = io.TeeReader(resp.Body, bufStreamData)
+		} else {
+			sharedReader = resp.Body
+		}
+
+		// copy from the reader to the mp3
+		_, err = io.Copy(mp3File, sharedReader)
+		if err != nil {
+			dlError <- fmt.Errorf("soundcloud DL failed to DL full track: %v\n", err)
+			return
+		}
+		resp.Body.Close()
+		if song.Writer != nil {
+			bufStreamData.Flush()
+			song.Writer.Close()
+		}
+		mp3File.Close()
+
+		log.Printf("Downloading of %v complete\n", song.URL().String())
+		dlError <- nil
+	}()
+
+	// Place into IPFS and resolve the placeholder
+	go func() {
+		// BLock until DL finishes, nil for success, else will be an error
+		err := <-dlError
+		if err != nil {
+			song.DLFailure <- fmt.Errorf("failed to download %s. Err: %v\n", song.URL().String(), err)
+			return
+		}
 
 		// Add to ipfs
 		ipfsPath, err := addToIpfs(fileLocation, ipfs)
