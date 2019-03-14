@@ -68,6 +68,14 @@ func (s *Song) MarshalJSON() ([]byte, error) {
 		rawURL = ""
 	}
 
+	// Sane defaults
+	if rawURL == "" {
+		rawURL = "https://ipfs.io" + s.IpfsPath()
+	}
+	if s.Title == "" {
+		s.Title = "Unknown Track"
+	}
+
 	return json.Marshal(&struct {
 		IpfsPath string        `json:"ipfsPath"`
 		URL      string        `json:"url"`
