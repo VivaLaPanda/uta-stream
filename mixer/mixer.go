@@ -29,8 +29,6 @@ type Mixer struct {
 	learnFrom       bool
 }
 
-var bufferSize int64 = 10000 //kb
-
 // NewMixer will return a mixer struct. Said struct will have the provided queue
 // attached for internal use. The Output channel is public, and the only way
 // consume the mixer's output. You are also provided the Current song path so you
@@ -143,6 +141,9 @@ func byteReader(r io.ReadCloser, ch chan []byte, bytesPerSecond int) chan bool {
 	if bytesPerSecond <= 0 {
 		bytesPerSecond = 2048
 	}
+
+	// Bump content rate to account for misc slowdown
+	bytesPerSecond += 300
 
 	done := make(chan bool)
 

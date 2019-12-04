@@ -111,14 +111,19 @@ func (q *AQEngine) NotifyPlayed(resourceID string, learnFrom bool) {
 	defer q.markovChain.chainLock.Unlock()
 
 	key := q.markovChain.prefix.String()
+	// Don't put more than one of the same song in the predict list
 	duplicate := false
 	for _, value := range (*q.markovChain.chainData)[key] {
 		if value == resourceID {
 			duplicate = true
 		}
 	}
+
 	if !duplicate && learnFrom {
-		(*q.markovChain.chainData)[key] = append((*q.markovChain.chainData)[key], resourceID)
+		// Make sure we aren't creating a loop
+		if key != resourceID {
+			(*q.markovChain.chainData)[key] = append((*q.markovChain.chainData)[key], resourceID)
+		}
 	}
 	q.markovChain.prefix.shift(resourceID)
 }

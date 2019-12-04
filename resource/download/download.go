@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 
 	"github.com/VivaLaPanda/uta-stream/resource"
+	"github.com/VivaLaPanda/ytdl"
 	shell "github.com/ipfs/go-ipfs-api"
-	"github.com/rylio/ytdl"
 )
 
 var knownProviders = [...]string{"youtube.com", "youtu.be"}
@@ -161,9 +161,6 @@ func addToIpfs(fileLocation string, ipfs *shell.Shell) (ipfsPath string, err err
 	ipfsPath, err = ipfs.Add(mp3File)
 	if err != nil {
 		return "", fmt.Errorf("Failed to add to IPFS. Err: %v\n", err)
-	}
-	if err = mp3File.Close(); err != nil {
-		return "", fmt.Errorf("failed to close mp3 after ipfs write. Err: %v", err)
 	}
 
 	// Formatting as proper ipfs path, not just hash

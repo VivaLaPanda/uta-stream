@@ -25,7 +25,7 @@ type Cache struct {
 
 // Used to limit how many ongoing downloads we have. useful to make sure
 // Youtube doesn't get mad at us
-var maxActiveDownloads = 3
+var maxActiveDownloads = 1
 
 // Function which will provide a new cache struct
 // An cache must be provided a file that it can read/write it's data to
@@ -134,8 +134,10 @@ func (c *Cache) handleUncachedUrl(song *resource.Song, url string, ipfs *shell.S
 	go func() {
 		_, err = song.Resolve(ipfs)
 
-		(*c.songMap)[url] = song
-		c.Write(c.cacheFilename)
+		if err == nil {
+			(*c.songMap)[url] = song
+			c.Write(c.cacheFilename)
+		}
 	}()
 
 	return song, err
