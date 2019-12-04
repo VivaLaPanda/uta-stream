@@ -18,10 +18,6 @@ var consumerWLock = sync.Mutex{}
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-// catchupFrameIncrement accounts for the fact that fetching the next song may have
-// introduced a delay by speeding up serving right when a song starts
-var catchupFrameIncrement = 2
-
 // Seed the random generator
 func init() {
 	rand.Seed(time.Now().UnixNano())
@@ -47,7 +43,7 @@ func generateNewStream(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 
 	// Register stream
-	mediaConsumer := make(chan []byte, 128)
+	mediaConsumer := make(chan []byte, 4)
 	consumerID := randIDGenerator(32)
 	//defer func() { killConsumer <- consumerID }()
 	consumerWLock.Lock()
@@ -61,14 +57,18 @@ func generateNewStream(w http.ResponseWriter, req *http.Request) {
 		killConsumer <- consumerID
 	}()
 
+	log.Printf("User %s connected", req.RemoteAddr)
+
 	// Recive bytes from the channel and respond with them
 	var err error
 	for bytesToStream := range mediaConsumer {
 		_, err = w.Write(bytesToStream)
 		if err != nil {
 			_, err = w.Write(bytesToStream) // Retry once
-			log.Printf("Copying audio data into response failed: %v", err)
-			return
+			if err != nil {
+				log.Printf("User %s disconnected", req.RemoteAddr)
+				return
+			}
 		}
 		flusher.Flush() // Trigger "chunked" encoding and send a chunk...
 	}
@@ -102,27 +102,17 @@ func ServeAudioOverHttp(inputAudio <-chan []byte, port int) {
 	// Listen to incoming audio bytes and push them out to all consumers
 	// If a consumer is blocking, just ignore it and keep going
 	go func() {
-		catchupFrames := 0
 		for audioBytes := range inputAudio {
-			// An empty signal from inputAudio indicates the end of a track.
-			// indicate that we need to play faster than normal to catch up
-			if len(audioBytes) < 1 {
-				catchupFrames += catchupFrameIncrement
-				audioBytes = <-inputAudio
-				continue
-			}
-
-			if catchupFrames > 0 {
-				catchupFrames -= 1
-			} else {
-				time.Sleep(500 * time.Millisecond)
-			}
+			// Bytes need to be spaced out to keep the client from getting too
+			// far ahead
+			time.Sleep(500 * time.Millisecond)
 
 			for _, consumer := range consumers {
 				select {
 				case consumer <- audioBytes:
 					// Send was good, do nothing
 				default:
+					log.Printf("Overburdened consumer")
 					// Send failed, we don't care
 					// This indicates an overburdened connection and will cause dropped
 					// audio
