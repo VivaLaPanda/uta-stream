@@ -54,6 +54,7 @@ func generateNewStream(w http.ResponseWriter, req *http.Request) {
 	notify := w.(http.CloseNotifier).CloseNotify()
 	go func() {
 		<-notify
+		log.Printf("User %s disconnected", req.RemoteAddr)
 		killConsumer <- consumerID
 	}()
 

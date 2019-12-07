@@ -134,7 +134,8 @@ func (c *Cache) handleUncachedUrl(song *resource.Song, url string, ipfs *shell.S
 	go func() {
 		_, err = song.Resolve(ipfs)
 
-		if err == nil {
+		// Double check we have an ipfs path registered
+		if err == nil && song.IpfsPath() != "" {
 			(*c.songMap)[url] = song
 			c.Write(c.cacheFilename)
 		}

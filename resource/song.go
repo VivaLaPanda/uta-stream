@@ -181,7 +181,15 @@ func (s *Song) Resolve(ipfs *shell.Shell) (reader io.ReadCloser, err error) {
 	} else if s.reader != nil {
 		return s.reader, nil
 	} else if s.ipfsPath != "" {
-		return ipfs.Cat(s.ipfsPath)
+		reader, err = ipfs.Cat(s.ipfsPath)
+
+		// Sometimes ipfs just stops responding under heavy load
+		// Wait 5 sec and retry
+		if err != nil {
+			time.Sleep(5 * time.Second)
+			return ipfs.Cat(s.ipfsPath)
+		}
+		return reader, err
 	}
 
 	return nil, fmt.Errorf("Song in an unknown state: %v", s)
