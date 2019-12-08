@@ -21,7 +21,6 @@ type Queue struct {
 	ipfs         *shell.Shell
 	AutoqEnabled bool
 }
-
 // NeqQueue will return a queue structure with the provided autoq engine and cache
 // attached. enableAutoq will determine whether a Pop will attempt to fetch
 // from the autoq.

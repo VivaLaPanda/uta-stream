@@ -38,7 +38,7 @@ type Mixer struct {
 // The mixer object will be tied to a goroutine which will populate the output
 func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 	mixer := &Mixer{
-		Output:          make(chan []byte, 4), // Needs to have space to handle song transition
+		Output:          make(chan []byte, 32), // Needs to have space to handle song transition
 		bitrate:         bitrate,
 		currentSongData: nil,
 		queue:           queue,

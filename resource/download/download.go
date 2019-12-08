@@ -69,9 +69,19 @@ func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, er
 	// Prepare the mp3 file we'll write to
 	fileLocation := filepath.Join(tempDLFolder, vidInfo.ID+".mp3")
 	_ = os.MkdirAll(filepath.Dir(fileLocation), os.ModePerm)
-	mp3File, err := os.Create(fileLocation)
-	if err != nil {
-		return song, fmt.Errorf("failed to create mp3 file. Err: %v", err)
+
+	// if the file already exists it's been queued already and is being downloaded
+	// by another thread. Don't error, but don't start the DL, resource resolution
+	// will handle the dupes
+	_, err = os.Stat(fileLocation)
+	var mp3File *os.File
+	if os.IsNotExist(err) {
+		mp3File, err = os.Create(fileLocation)
+		if err != nil {
+			return song, fmt.Errorf("failed to create mp3 file. Err: %v", err)
+		}
+	} else {
+		return song, nil
 	}
 
 	// Download the mp4 into the converter
