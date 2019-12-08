@@ -17,6 +17,7 @@ import (
 
 var knownProviders = [...]string{"youtube.com", "youtu.be"}
 var tempDLFolder = "TEMP-DL"
+var maxDownloaders = make(chan int, 3)
 
 // Master download router. Looks at the url and determins which service needs
 // to hand the url. hotWriter is used to allow for playing the audio
@@ -87,7 +88,9 @@ func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, er
 	// Download the mp4 into the converter
 	dlError := make(chan error)
 	go func() {
-		log.Printf("Downloading mp4 from %v\n", song.URL().String())
+		log.Printf("Queuing download of mp4 from %v\n", song.URL().String())
+		maxDownloaders <- 0
+		log.Printf("Starting download of mp4 from %v\n", song.URL().String())
 		err = vidInfo.Download(bestFormat, convInput)
 		defer convInput.Close()
 		if err != nil {
@@ -95,6 +98,7 @@ func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, er
 			return
 		}
 		log.Printf("Downloading of %v complete\n", song.URL().String())
+		<-maxDownloaders
 		dlError <- nil
 	}()
 
