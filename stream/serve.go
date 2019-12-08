@@ -3,6 +3,7 @@
 package stream
 
 import (
+	"container/list"
 	"fmt"
 	"log"
 	"math/rand"
@@ -15,6 +16,8 @@ import (
 var consumers = make(map[string]chan []byte)
 var killConsumer = make(chan string)
 var consumerWLock = sync.Mutex{}
+var lastChunks = list.New()
+var lastChunksLock = sync.RWMutex{}
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
@@ -60,6 +63,14 @@ func generateNewStream(w http.ResponseWriter, req *http.Request) {
 
 	log.Printf("User %s connected", req.RemoteAddr)
 
+	// Write the last chunk to bootstrap the stream
+	lastChunksLock.RLock()
+	for bytes := lastChunks.Front(); bytes != nil; bytes = bytes.Next() {
+		w.Write(bytes.Value.([]byte))
+	}
+	lastChunksLock.RUnlock()
+	flusher.Flush()
+
 	// Recive bytes from the channel and respond with them
 	var err error
 	for bytesToStream := range mediaConsumer {
@@ -100,6 +111,12 @@ func ServeAudioOverHttp(inputAudio <-chan []byte, port int) {
 		}
 	}()
 
+	// Init fifo queue of size 3
+	var emptyArr []byte
+	for idx := 0; idx < 16; idx++ {
+		lastChunks.PushBack(emptyArr)
+	}
+
 	// Listen to incoming audio bytes and push them out to all consumers
 	// If a consumer is blocking, just ignore it and keep going
 	go func() {
@@ -119,6 +136,12 @@ func ServeAudioOverHttp(inputAudio <-chan []byte, port int) {
 					// audio
 				}
 			}
+
+			// Maintain fifo queue
+			lastChunksLock.Lock()
+			lastChunks.Remove(lastChunks.Front())
+			lastChunks.PushBack(audioBytes)
+			lastChunksLock.Unlock()
 		}
 	}()
 

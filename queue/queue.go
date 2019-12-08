@@ -21,6 +21,7 @@ type Queue struct {
 	ipfs         *shell.Shell
 	AutoqEnabled bool
 }
+
 // NeqQueue will return a queue structure with the provided autoq engine and cache
 // attached. enableAutoq will determine whether a Pop will attempt to fetch
 // from the autoq.
@@ -104,6 +105,7 @@ func (q *Queue) AddToQueue(song *resource.Song) {
 // Add the provided song to the queue at the front
 func (q *Queue) PlayNext(song *resource.Song) {
 	q.lock.Lock()
+	log.Printf("Adding %s(%s) to queue", song.Title, song.URL())
 	q.fifo = append([]*resource.Song{song}, q.fifo...)
 	q.lock.Unlock()
 }
