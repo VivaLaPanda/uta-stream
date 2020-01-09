@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 
 	"github.com/VivaLaPanda/uta-stream/resource"
-	"github.com/VivaLaPanda/ytdl"
 	shell "github.com/ipfs/go-ipfs-api"
+	"github.com/rylio/ytdl"
 )
 
 var knownProviders = [...]string{"youtube.com", "youtu.be"}
@@ -42,14 +42,20 @@ func Download(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error) {
 
 func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error) {
 	// Get the info for the video
-	vidInfo, err := ytdl.GetVideoInfoFromShortURL(song.URL())
+	vidInfo, err := ytdl.GetVideoInfoFromURL(song.URL())
 	if err != nil {
 		return song, fmt.Errorf("failed to fetch provided Youtube url. Err: %v", err)
 	}
 
 	// Figure out the highest bitrate format
 	formats := vidInfo.Formats
-	bestFormat := formats.Best(ytdl.FormatAudioBitrateKey)[0] // Format with highest bitrate
+	var bestFormat *ytdl.Format
+	bestFormatList := formats.Best(ytdl.FormatAudioBitrateKey) // Format with highest bitrate
+	if len(bestFormatList) > 0 {
+		bestFormat = bestFormatList[0]
+	} else {
+		return song, fmt.Errorf("Failed to determine video format")
+	}
 
 	// Add metadata to resource.Song
 	song.Title = vidInfo.Title
