@@ -20,6 +20,9 @@ type AQEngine struct {
 	markovChain *chain
 	playedSongs chan string
 	cache       *cache.Cache
+
+	recent       []string
+	recentLength int
 }
 
 // How many minutes to wait between saves of the autoq state
@@ -30,8 +33,13 @@ var autosaveTimer time.Duration = 5
 // so that the chain is preserved between launches. Chainbreak prob will determine
 // how often to give a random suggestion instead of the *real* one. Prefix length
 // determines how far back the autoq's "memory" goes back. Longer = more predictable
-func NewAQEngine(qfile string, cache *cache.Cache, chainbreakProb float64, prefixLength int) *AQEngine {
-	q := &AQEngine{newChain(prefixLength, chainbreakProb), make(chan string), cache}
+func NewAQEngine(qfile string, cache *cache.Cache, chainbreakProb float64, prefixLength int, recentLength int) *AQEngine {
+	q := &AQEngine{
+		markovChain:  newChain(prefixLength, chainbreakProb),
+		playedSongs:  make(chan string),
+		cache:        cache,
+		recent:       make([]string, recentLength),
+		recentLength: recentLength}
 
 	// Confirm we can interact with our persitent storage
 	_, err := os.Stat(qfile)
@@ -128,6 +136,35 @@ func (q *AQEngine) NotifyPlayed(resourceID string, learnFrom bool) {
 	q.markovChain.prefix.shift(resourceID)
 }
 
+func (q *AQEngine) generateFresh() (song string) {
+	// Add defer to store whatever ends up getting returned
+	defer q.pushRecent(song)
+	count := 0
+	for song = q.markovChain.generate(); q.isFresh(song); song = q.markovChain.generate() {
+		if count > 5 {
+			// We can't seem to get a fresh song, just ask for a random one
+			return q.markovChain.getRandom()
+		}
+		count++
+	}
+	return song
+}
+
+func (q *AQEngine) pushRecent(s string) {
+	q.recent = append(q.recent, s)
+	q.recent = q.recent[1:]
+}
+
+func (q *AQEngine) isFresh(s string) bool {
+	for _, elem := range q.recent {
+		if s == elem {
+			return false
+		}
+	}
+
+	return true
+}
+
 // prefix is a Markov chain prefix of one or more song.
 type prefix []string
 
@@ -160,15 +197,40 @@ func newChain(prefixLen int, chainbreakProb float64) *chain {
 }
 
 // Returns the next song to play
-func (c *chain) generate() string {
+func (c *chain) generate() (song string) {
 	// Choices represents songs it might be good to play next
 	c.chainLock.RLock()
 	choices := (*c.chainData)[c.prefix.String()]
 	c.chainLock.RUnlock()
 
+	// If there are no known songs, just pick something at random
+	if len(choices) == 0 {
+		return c.getRandom()
+	}
+
+	// Some chance of picking a random song based on chainbreakProb
+	if c.chainbreakProb != 0 && len(choices) < 4 {
+		randInt := int(1 / c.chainbreakProb)
+		if rand.Intn(randInt) == 1 {
+			return c.getRandom()
+		}
+	}
+
+	// Randomly select one of the choices
+	song = choices[rand.Intn(len(choices))]
+
+	// Handle nullsong
+	if song == "" {
+		return c.getRandom()
+	}
+
+	return song
+}
+
+func (c *chain) getRandom() (randChoice string) {
 	// Randchoice provides a song randomly from the chain, without regard to the last
 	// song
-	var randChoice string
+	c.chainLock.RLock()
 	if len(*c.chainData) == 0 {
 		return ""
 	}
@@ -184,27 +246,7 @@ func (c *chain) generate() string {
 		}
 		idx += 1
 	}
+	c.chainLock.RUnlock()
 
-	// If there are no known songs, just pick something at random
-	if len(choices) == 0 {
-		return randChoice
-	}
-
-	// Some chance of picking a random song based on chainbreakProb
-	if c.chainbreakProb != 0 && len(choices) < 4 {
-		randInt := int(1 / c.chainbreakProb)
-		if rand.Intn(randInt) == 1 {
-			return randChoice
-		}
-	}
-
-	// Randomly select one of the choices
-	song := choices[rand.Intn(len(choices))]
-
-	// Handle nullsong
-	if song == "" {
-		return randChoice
-	}
-
-	return song
+	return
 }

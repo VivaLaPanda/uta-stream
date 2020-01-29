@@ -17,6 +17,7 @@ var cacheFilename = flag.String("cacheFilename", "cache.db", "Where to store cac
 var authCfgFilename = flag.String("authCfgFilename", "", "Where to find auth config json")
 var ipfsUrl = flag.String("ipfsUrl", "localhost:5001", "The url of the local IPFS instance")
 var enableAutoq = flag.Bool("enableAutoq", true, "Whether to use autoq feature")
+var recentLength = flag.Int("recentLength", 3, "Don't autoq a song that was in the last N played songs")
 var chainbreakProb = flag.Float64("chainbreakProb", .05, "Allows more random autoq")
 var bitrate = flag.Int("bitrate", 160, "Affects stream smoothness/synchro")
 var autoQPrefixLen = flag.Int("autoQPrefixLen", 1, "Smaller = more random") // Large values will be random if the history is short
@@ -27,8 +28,8 @@ func main() {
 	flag.Parse()
 
 	c := cache.NewCache(*cacheFilename, *ipfsUrl)
-	a := auto.NewAQEngine(*autoqFilename, c, *chainbreakProb, *autoQPrefixLen)
-	q := queue.NewQueue(a, *enableAutoq, *ipfsUrl)
+	a := auto.NewAQEngine(*autoqFilename, c, *chainbreakProb, *autoQPrefixLen, *recentLength)
+	q := queue.NewQueue(a, *enableAutoq, *recentLength, *ipfsUrl)
 	e := mixer.NewMixer(q, *bitrate)
 
 	go func() {

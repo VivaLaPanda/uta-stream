@@ -23,7 +23,7 @@ func TestWrite(t *testing.T) {
 	autoqTestfile := "autoq.db.test"
 	cacheFile := "cache.db.test"
 	c := cache.NewCache(cacheFile, "localhost:5001")
-	q := NewAQEngine(autoqTestfile, c, 0, 1)
+	q := NewAQEngine(autoqTestfile, c, 0, 1, 0)
 	_, err := os.Stat(autoqTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)
@@ -44,7 +44,7 @@ func TestLoad(t *testing.T) {
 	autoqTestfile := "TestLoadQfile.test"
 	cacheFile := "cache.db.test"
 	c := cache.NewCache(cacheFile, "localhost:5001")
-	q := NewAQEngine(autoqTestfile, c, 0, 1)
+	q := NewAQEngine(autoqTestfile, c, 0, 1, 0)
 	_, err := os.Stat(autoqTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)
@@ -66,7 +66,7 @@ func TestNotifyPlayed(t *testing.T) {
 	autoqTestfile := "TestLoadQfile.test"
 	cacheFile := "cache.db.test"
 	c := cache.NewCache(cacheFile, "localhost:5001")
-	q := NewAQEngine(autoqTestfile, c, 0, 1)
+	q := NewAQEngine(autoqTestfile, c, 0, 1, 0)
 	_, err := os.Stat(autoqTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)
@@ -85,7 +85,7 @@ func TestVpop(t *testing.T) {
 	autoqTestfile := "TestLoadQfile.test"
 	cacheFile := "cache.db.test"
 	c := cache.NewCache(cacheFile, "localhost:5001")
-	q := NewAQEngine(autoqTestfile, c, 1, 1)
+	q := NewAQEngine(autoqTestfile, c, 1, 1, 0)
 	_, err := os.Stat(autoqTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)
@@ -124,7 +124,7 @@ func TestMigrate(t *testing.T) {
 	autoqTestfile := "autoq.db"
 	cacheFile := "cache.db.test"
 	c := cache.NewCache(cacheFile, "localhost:5001")
-	q := NewAQEngine(autoqTestfile, c, 0, 1)
+	q := NewAQEngine(autoqTestfile, c, 0, 1, 0)
 	_, err := os.Stat(autoqTestfile)
 	if err != nil {
 		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)

@@ -98,8 +98,14 @@ func (q *Queue) IsEmpty() bool {
 // Add the provided song to the queue at the back
 func (q *Queue) AddToQueue(song *resource.Song) {
 	q.lock.Lock()
+	defer q.lock.Unlock()
+	for _, elem := range q.fifo {
+		if elem.URL() == song.URL() {
+			log.Printf("Tried to queue a duplicate (%s), rejecting", song.Title)
+			return
+		}
+	}
 	q.fifo = append(q.fifo, song)
-	q.lock.Unlock()
 }
 
 // Add the provided song to the queue at the front
