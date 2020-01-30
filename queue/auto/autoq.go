@@ -114,6 +114,8 @@ func (q *AQEngine) Vpop() (*resource.Song, error) {
 // In our case we use it to notify the chain that a song was played in full
 // learn from allows you to advance the chain without adding data if false
 func (q *AQEngine) NotifyPlayed(resourceID string, learnFrom bool) {
+	// Put it in the recent so we don't play it again too soon
+	q.pushRecent(resourceID)
 
 	q.markovChain.chainLock.Lock()
 	defer q.markovChain.chainLock.Unlock()
@@ -142,11 +144,11 @@ func (q *AQEngine) Shuffle() {
 
 func (q *AQEngine) generateFresh() (song string) {
 	// Add defer to store whatever ends up getting returned
-	defer q.pushRecent(song)
 	count := 0
-	for song = q.markovChain.generate(); q.isFresh(song); song = q.markovChain.generate() {
+	for song = q.markovChain.generate(); !q.isFresh(song); song = q.markovChain.generate() {
 		if count > 5 {
 			// We can't seem to get a fresh song, just ask for a random one
+			log.Printf("Couldn't get a fresh song, shuffling...\n")
 			return q.markovChain.getRandom()
 		}
 		count++
@@ -154,9 +156,12 @@ func (q *AQEngine) generateFresh() (song string) {
 	return song
 }
 
-func (q *AQEngine) pushRecent(s string) {
+// Return what was passed in for chaining
+func (q *AQEngine) pushRecent(s string) string {
 	q.recent = append(q.recent, s)
 	q.recent = q.recent[1:]
+
+	return s
 }
 
 func (q *AQEngine) isFresh(s string) bool {

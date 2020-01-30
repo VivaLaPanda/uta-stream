@@ -102,7 +102,7 @@ func TestVpop(t *testing.T) {
 	song, _ := q.Vpop()
 	songPath := song.ResourceID()
 	if songPath != "test_a" {
-		t.Errorf("Autoq produced unexpected song (expected != actual). %v != %v", "test_a", song)
+		t.Errorf("Autoq produced unexpected song (expected != actual). %v != %v", "test_a", songPath)
 	}
 
 	// Play an a, now the next should be a b
@@ -112,7 +112,40 @@ func TestVpop(t *testing.T) {
 
 	songPath = song.ResourceID()
 	if songPath != "test_b" {
-		t.Errorf("Autoq produced unexpected song (expected != actual). %v != %v", "test_b", song)
+		t.Errorf("Autoq produced unexpected song (expected != actual). %v != %v", "test_b", songPath)
+	}
+
+	cleanupAutoq(autoqTestfile)
+	cleanupAutoq(cacheFile)
+}
+
+func TestFresh(t *testing.T) {
+	// Simple test of vpop
+	// Ensure the file isn't already there.
+	autoqTestfile := "TestLoadQfile.test"
+	cacheFile := "cache.db.test"
+	c := cache.NewCache(cacheFile, "localhost:5001")
+	q := NewAQEngine(autoqTestfile, c, 1, 1, 2)
+	_, err := os.Stat(autoqTestfile)
+	if err != nil {
+		t.Errorf("Failed to stat qfile after initing autoq. Err: %v\n", err)
+	}
+
+	// Create a chain which is a cycle between test_a and test_b states
+	q.NotifyPlayed("test_a", true)
+	q.NotifyPlayed("test_b", true)
+	q.NotifyPlayed("test_a", true)
+	q.NotifyPlayed("test_b", true)
+	time.Sleep(1) // Necessary because NotifyPlayed is async
+
+	// At this point we should run into the freshness limiter
+	q.NotifyPlayed("test_a", true)
+	time.Sleep(1)
+	song, _ := q.Vpop()
+
+	songPath := song.ResourceID()
+	if songPath == "test_b" {
+		t.Errorf("TestFresh produced unexpected song (expected != actual). %v != %v", "test_b", songPath)
 	}
 
 	cleanupAutoq(autoqTestfile)
