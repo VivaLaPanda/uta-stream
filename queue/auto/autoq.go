@@ -107,7 +107,7 @@ func (q *AQEngine) Load(filename string) error {
 
 // Vpop simply returns the next song according to the Markov chain
 func (q *AQEngine) Vpop() (*resource.Song, error) {
-	return q.cache.Lookup(q.markovChain.generate(), false)
+	return q.cache.Lookup(q.generateFresh(), false)
 }
 
 // The interface for external callers to add to the markov chain
@@ -134,6 +134,10 @@ func (q *AQEngine) NotifyPlayed(resourceID string, learnFrom bool) {
 		}
 	}
 	q.markovChain.prefix.shift(resourceID)
+}
+
+func (q *AQEngine) Shuffle() {
+	q.NotifyPlayed(q.markovChain.getRandom(), false)
 }
 
 func (q *AQEngine) generateFresh() (song string) {
@@ -231,6 +235,7 @@ func (c *chain) getRandom() (randChoice string) {
 	// Randchoice provides a song randomly from the chain, without regard to the last
 	// song
 	c.chainLock.RLock()
+	defer c.chainLock.RUnlock()
 	if len(*c.chainData) == 0 {
 		return ""
 	}
@@ -246,7 +251,6 @@ func (c *chain) getRandom() (randChoice string) {
 		}
 		idx += 1
 	}
-	c.chainLock.RUnlock()
 
 	return
 }

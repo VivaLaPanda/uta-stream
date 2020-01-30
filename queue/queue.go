@@ -155,6 +155,10 @@ func (q *Queue) GetQueue() []*resource.Song {
 	return qCopy
 }
 
+func (q *Queue) Shuffle() {
+	q.autoq.Shuffle()
+}
+
 func remove(s []*resource.Song, i int) []*resource.Song {
 	s[len(s)-1], s[i] = s[i], s[len(s)-1]
 	return s[:len(s)-1]

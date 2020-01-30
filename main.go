@@ -29,7 +29,7 @@ func main() {
 
 	c := cache.NewCache(*cacheFilename, *ipfsUrl)
 	a := auto.NewAQEngine(*autoqFilename, c, *chainbreakProb, *autoQPrefixLen, *recentLength)
-	q := queue.NewQueue(a, *enableAutoq, *recentLength, *ipfsUrl)
+	q := queue.NewQueue(a, *enableAutoq, *ipfsUrl)
 	e := mixer.NewMixer(q, *bitrate)
 
 	go func() {

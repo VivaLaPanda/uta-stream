@@ -62,6 +62,8 @@ func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, port int, authCfgF
 		Methods("POST")
 	router.Handle("/skip", skip(m)).
 		Methods("POST")
+	router.Handle("/shuffle", shuffle(m, q)).
+		Methods("POST")
 	router.Handle("/play", play(m)).
 		Methods("PUT")
 	router.Handle("/pause", pause(m)).
@@ -178,6 +180,19 @@ func skip(e *mixer.Mixer) http.Handler {
 		e.Skip()
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "{\"message\":\"song skipped successfully\"}")
+	})
+}
+
+// skip will skip the currently playing song. Expect some delay
+func shuffle(e *mixer.Mixer, q *queue.Queue) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Go tell the queue to force a chainbreak/randomize
+		q.Shuffle()
+		// Encoder is in charge of skipping, not the queue
+		// Kinda weird, but it was the best way to reduce component interdependency
+		e.Skip()
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, "{\"message\":\"autoq shuffled successfully\"}")
 	})
 }
 
