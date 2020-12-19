@@ -55,6 +55,23 @@ func TestDownloadYoutube(t *testing.T) {
 	}
 }
 
+func TestDownloadMP3(t *testing.T) {
+	rawUrl := "https://www.mediacollege.com/audio/tone/files/100Hz_44100Hz_16bit_05sec.mp3"
+	ipfsUrl := "localhost:5001"
+
+	// Setup shell and testing url
+	ipfs := shell.NewShell(ipfsUrl)
+	songToTest, _ := resource.NewSong(rawUrl, false)
+
+	// Commence the download
+	song, err := downloadMp3(songToTest, ipfs)
+	if err != nil {
+		t.Errorf("TestDownloadYoutube failed due to an error: %v", err)
+	}
+
+	song.Resolve(ipfs)
+}
+
 func TestFetchIpfs(t *testing.T) {
 	ipfsUrl := "localhost:5001"
 	ipfsPath := "/ipfs/QmZem7HHzLuhq8Qa4CHD6Q4VUdn9ihP5vaEihhfUhqqyPN"

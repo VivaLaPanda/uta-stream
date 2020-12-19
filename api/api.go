@@ -162,6 +162,11 @@ func queuer(q *queue.Queue, c *cache.Cache, qFunc QFunc) http.Handler {
 			log.Printf("Failed to enqueue song, err: %v", err)
 			return
 		}
+
+		if r.URL.Query().Get("title") != "" {
+			songToQueue.Title = r.URL.Query().Get("title")
+		}
+
 		qFunc(songToQueue)
 
 		w.WriteHeader(http.StatusOK)
