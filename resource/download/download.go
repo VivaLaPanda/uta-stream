@@ -12,7 +12,7 @@ import (
 
 	"github.com/VivaLaPanda/uta-stream/resource"
 	shell "github.com/ipfs/go-ipfs-api"
-	"github.com/rylio/ytdl"
+	ytdl "github.com/kkdai/youtube"
 )
 
 var knownProviders = [...]string{"youtube.com", "youtu.be"}
@@ -40,22 +40,30 @@ func Download(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error) {
 	}
 }
 
+func bestAudio(formats []ytdl.Format) (best *ytdl.Format) {
+	best = &ytdl.Format{AudioSampleRate: ""}
+
+	for _, format := range formats {
+		if format.AudioSampleRate > best.AudioSampleRate && format.AudioChannels >= best.AudioChannels {
+			best = &format
+		}
+	}
+
+	return
+}
+
 func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error) {
+	// Setup Client
+	dlClient := ytdl.Client{}
+
 	// Get the info for the video
-	vidInfo, err := ytdl.GetVideoInfoFromURL(song.URL())
+	vidInfo, err := dlClient.GetVideo(song.URL().String())
 	if err != nil {
 		return song, fmt.Errorf("failed to fetch provided Youtube url. Err: %v", err)
 	}
 
 	// Figure out the highest bitrate format
-	formats := vidInfo.Formats
-	var bestFormat *ytdl.Format
-	bestFormatList := formats.Best(ytdl.FormatAudioBitrateKey) // Format with highest bitrate
-	if len(bestFormatList) > 0 {
-		bestFormat = bestFormatList[0]
-	} else {
-		return song, fmt.Errorf("Failed to determine video format")
-	}
+	bestFormat := bestAudio(vidInfo.Formats)
 
 	// Add metadata to resource.Song
 	song.Title = vidInfo.Title
@@ -97,12 +105,16 @@ func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, er
 		log.Printf("Queuing download of mp4 from %v\n", song.URL().String())
 		maxDownloaders <- 0
 		log.Printf("Starting download of mp4 from %v\n", song.URL().String())
-		err = vidInfo.Download(bestFormat, convInput)
-		defer convInput.Close()
+		rawRespStream, err := dlClient.GetStream(vidInfo, bestFormat)
 		if err != nil {
 			dlError <- fmt.Errorf("ytdl encountered an error: %v\n", err)
 			return
 		}
+		defer rawRespStream.Body.Close()
+
+		io.Copy(convInput, rawRespStream.Body)
+		defer convInput.Close()
+
 		log.Printf("Downloading of %v complete\n", song.URL().String())
 		<-maxDownloaders
 		dlError <- nil
