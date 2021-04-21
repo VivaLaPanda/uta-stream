@@ -4,6 +4,7 @@ package download
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -143,13 +144,18 @@ func downloadMp3(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error)
 	return song, nil
 }
 
-func bestAudio(formats []ytdl.Format) (best *ytdl.Format) {
+func bestAudio(client ytdl.Client, video *ytdl.Video, formats []ytdl.Format) (best *ytdl.Format) {
 	best = &ytdl.Format{AudioSampleRate: ""}
 
 	for idx, format := range formats {
 		if format.AudioSampleRate > best.AudioSampleRate && format.AudioChannels >= best.AudioChannels {
 			// Adding this code to make sure the formats are actually downloadable
-			resp, err := http.Get(format.URL)
+			url, err := client.GetStreamURLContext(context.Background(), video, &format)
+			if err != nil {
+				continue
+			}
+
+			resp, err := http.Get(url)
 			if err != nil {
 				continue
 			}
@@ -173,7 +179,7 @@ func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, er
 	}
 
 	// Figure out the highest bitrate format
-	bestFormat := bestAudio(vidInfo.Formats)
+	bestFormat := bestAudio(dlClient, vidInfo, vidInfo.Formats)
 
 	// Add metadata to resource.Song
 	song.Title = vidInfo.Title
