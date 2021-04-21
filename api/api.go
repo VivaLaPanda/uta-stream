@@ -56,6 +56,8 @@ func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, port int, authCfgF
 	router.Use(headerMiddleware)
 	router.Handle("/", index()).
 		Methods("GET")
+	router.Handle("/auth", authTest(amw)).
+		Methods("GET")
 	router.Handle("/enqueue", queuer(q, c, q.AddToQueue)).
 		Methods("POST")
 	router.Handle("/playnext", queuer(q, c, q.PlayNext)).
@@ -132,6 +134,20 @@ func index() http.Handler {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "{\"message\":\"This is the UtaStream client API."+
 			"Documentation on routes is at https://github.com/VivaLaPanda/uta-stream\"}")
+	})
+}
+
+// authCanary is used to validate whether you have access to a particular route
+func authTest(amw *authMiddleware) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := r.Header.Get("Authorization")
+		route := "/api" + r.URL.Query().Get("route")
+
+		if amw.ValidateToken(token, route) {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusForbidden)
+		}
 	})
 }
 
@@ -259,7 +275,7 @@ func logging(logger *log.Logger) func(http.Handler) http.Handler {
 					requestID = "unknown"
 				}
 
-				if r.URL.Path != "/api/playing" {
+				if r.URL.Path != "/api/playing" && r.URL.Path != "/api/auth" {
 					logger.Println(requestID, r.Method, r.URL.Path, r.RemoteAddr, r.UserAgent())
 				}
 			}()

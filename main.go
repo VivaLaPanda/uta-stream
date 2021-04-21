@@ -14,7 +14,7 @@ import (
 // Various runtime flags
 var autoqFilename = flag.String("autoqFilename", "autoq.db", "Where to store autoq database")
 var cacheFilename = flag.String("cacheFilename", "cache.db", "Where to store cache database")
-var authCfgFilename = flag.String("authCfgFilename", "", "Where to find auth config json")
+var authCfgFilename = flag.String("authCfgFilename", "auth.json", "Where to find auth config json")
 var ipfsUrl = flag.String("ipfsUrl", "localhost:5001", "The url of the local IPFS instance")
 var enableAutoq = flag.Bool("enableAutoq", true, "Whether to use autoq feature")
 var recentLength = flag.Int("recentLength", 3, "Don't autoq a song that was in the last N played songs")

@@ -57,7 +57,7 @@ func (amw *authMiddleware) Middleware(next http.Handler) http.Handler {
 		token := r.Header.Get("Authorization")
 		route := r.URL.Path
 
-		if amw.validateToken(token, route) {
+		if amw.ValidateToken(token, route) {
 			// Pass down the request to the next middleware (or final handler)
 			next.ServeHTTP(w, r)
 		} else {
@@ -67,7 +67,7 @@ func (amw *authMiddleware) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-func (amw *authMiddleware) validateToken(token string, route string) (valid bool) {
+func (amw *authMiddleware) ValidateToken(token string, route string) (valid bool) {
 	// Check if we have a valid token at all
 	if len(token) < 7 || token[:7] != "Bearer " {
 		// Apply the default token
@@ -76,6 +76,7 @@ func (amw *authMiddleware) validateToken(token string, route string) (valid bool
 	token = token[7:]
 	if roles, found := amw.data.TokenRoles[token]; found {
 		for _, role := range roles {
+			// Wildcard perms (basically sudo)
 			if role == "*" {
 				return true
 			}
@@ -86,6 +87,16 @@ func (amw *authMiddleware) validateToken(token string, route string) (valid bool
 		}
 		return false
 	} else {
+		// Wildcard role
+		for _, role := range amw.data.TokenRoles["*"] {
+			if role == "*" {
+				return true
+			}
+
+			if route == amw.basePath+role {
+				return true
+			}
+		}
 		return false
 	}
 }
