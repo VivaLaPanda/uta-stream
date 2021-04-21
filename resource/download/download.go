@@ -14,7 +14,7 @@ import (
 
 	"github.com/VivaLaPanda/uta-stream/resource"
 	shell "github.com/ipfs/go-ipfs-api"
-	ytdl "github.com/kkdai/youtube"
+	ytdl "github.com/kkdai/youtube/v2"
 )
 
 var knownProviders = [...]string{"youtube.com", "youtu.be"}
@@ -37,10 +37,10 @@ func Download(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error) {
 	case "youtu.be":
 		return downloadYoutube(song, ipfs)
 	default:
-		// Get the filename from the web
+		// Get the ext
 		ext := path.Ext(song.URL().Path)
 
-		if ext == "mp3" {
+		if ext == ".mp3" {
 			return downloadMp3(song, ipfs)
 		}
 
@@ -53,6 +53,10 @@ func downloadMp3(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error)
 	// Get the filename from the web
 	webPath := song.URL().Path
 	filename := path.Base(webPath)
+
+	if song.Title == "" {
+		song.Title = filename
+	}
 
 	// Prepare the piping
 	output, input := io.Pipe()
@@ -142,9 +146,16 @@ func downloadMp3(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error)
 func bestAudio(formats []ytdl.Format) (best *ytdl.Format) {
 	best = &ytdl.Format{AudioSampleRate: ""}
 
-	for _, format := range formats {
+	for idx, format := range formats {
 		if format.AudioSampleRate > best.AudioSampleRate && format.AudioChannels >= best.AudioChannels {
-			best = &format
+			// Adding this code to make sure the formats are actually downloadable
+			resp, err := http.Get(format.URL)
+			if err != nil {
+				continue
+			}
+			if resp.StatusCode == http.StatusOK {
+				best = &formats[idx]
+			}
 		}
 	}
 
@@ -289,6 +300,13 @@ func addToIpfs(fileLocation string, ipfs *shell.Shell) (ipfsPath string, err err
 	if err != nil {
 		return "", fmt.Errorf("Failed to open downloaded mp3. Err: %v\n", err)
 	}
+
+	fileInfo, _ := os.Stat(fileLocation)
+
+	if fileInfo.Size() == 0 {
+		return "", fmt.Errorf("File was 0 bytes, didn didn't cache.\n")
+	}
+
 	ipfsPath, err = ipfs.Add(mp3File)
 	if err != nil {
 		return "", fmt.Errorf("Failed to add to IPFS. Err: %v\n", err)

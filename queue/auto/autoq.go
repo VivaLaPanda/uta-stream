@@ -132,6 +132,7 @@ func (q *AQEngine) NotifyPlayed(resourceID string, learnFrom bool) {
 	if !duplicate && learnFrom {
 		// Make sure we aren't creating a loop
 		if key != resourceID {
+			log.Printf("Adding new song %s to autoqueuer\n", resourceID)
 			(*q.markovChain.chainData)[key] = append((*q.markovChain.chainData)[key], resourceID)
 		}
 	}

@@ -40,6 +40,8 @@ func TestDownloadYoutube(t *testing.T) {
 	rawUrl := "https://youtu.be/nAwTw1aYy6M"
 	ipfsUrl := "localhost:5001"
 
+	t.Errorf("%s", os.RemoveAll("TEMP-DL"))
+
 	// Setup shell and testing url
 	ipfs := shell.NewShell(ipfsUrl)
 	songToTest, _ := resource.NewSong(rawUrl, false)
@@ -49,10 +51,17 @@ func TestDownloadYoutube(t *testing.T) {
 	if err != nil {
 		t.Errorf("TestDownloadYoutube failed due to an error: %v", err)
 	}
+
+	_, err = song.Resolve(ipfs)
+	if err != nil {
+		t.Errorf("TestDownloadYoutube failed due to an error: %v", err)
+	}
+
 	expectedTitle := "1080 Hz Sine Wave 30 sec"
 	if song.Title != expectedTitle {
 		t.Errorf("Song title doesn't equal expected. e: %s, a:%s\n", expectedTitle, song.Title)
 	}
+
 }
 
 func TestDownloadMP3(t *testing.T) {

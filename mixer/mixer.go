@@ -130,6 +130,7 @@ func (m *Mixer) fetchNextSong() (
 
 	// Get MP3 reader.
 	nextSong, nextSongReader, isEmpty, fromAuto := m.queue.Pop()
+	log.Printf("About to play %s\n", nextSong.ResourceID())
 	if isEmpty {
 		return nil, nextSong, true, fromAuto
 	}

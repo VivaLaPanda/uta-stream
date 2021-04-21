@@ -3,8 +3,10 @@
 package queue
 
 import (
+	"encoding/json"
 	"io"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -15,26 +17,81 @@ import (
 )
 
 type Queue struct {
-	fifo         []*resource.Song
-	lock         *sync.Mutex
-	autoq        *auto.AQEngine
-	ipfs         *shell.Shell
-	AutoqEnabled bool
+	fifo          []*resource.Song
+	lock          *sync.Mutex
+	autoq         *auto.AQEngine
+	ipfs          *shell.Shell
+	queueFilename string
+	AutoqEnabled  bool
 }
 
 // NeqQueue will return a queue structure with the provided autoq engine and cache
 // attached. enableAutoq will determine whether a Pop will attempt to fetch
 // from the autoq.
 func NewQueue(aqEngine *auto.AQEngine, enableAutoq bool, ipfsUrl string) *Queue {
+	queueFilename := "queue.db"
 	q := &Queue{
-		lock:         &sync.Mutex{},
-		autoq:        aqEngine,
-		AutoqEnabled: enableAutoq,
-		ipfs:         shell.NewShell(ipfsUrl),
+		lock:          &sync.Mutex{},
+		autoq:         aqEngine,
+		AutoqEnabled:  enableAutoq,
+		queueFilename: queueFilename,
+		ipfs:          shell.NewShell(ipfsUrl),
 	}
-	q.ipfs.SetTimeout(time.Minute * 15)
+	q.ipfs.SetTimeout(time.Minute * 30)
+
+	// Confirm we can interact with our persitent storage
+	_, err := os.Stat(queueFilename)
+	if err == nil {
+		err = q.Load(queueFilename)
+	} else if os.IsNotExist(err) {
+		log.Printf("qfile %s doesn't exist. Creating new qfile", queueFilename)
+		err = q.Write(queueFilename)
+	}
+
+	if err != nil {
+		log.Fatalf("Fatal error when interacting with qfile on launch.\nErr: %v\n", err)
+	}
 
 	return q
+}
+
+// Method which will write the autoq data to the provided file. Will overwrite
+// a file if one already exists at that location.
+func (q *Queue) Write(filename string) error {
+	qfile, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0660)
+	defer qfile.Close()
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(qfile)
+	q.lock.Lock()
+	if len(q.fifo) == 0 {
+		qfile.WriteString("[]")
+	} else {
+		encoder.Encode(q.fifo)
+	}
+	q.lock.Unlock()
+
+	return nil
+}
+
+// Method which will load the provided autoq data file. Will overwrite the internal
+// state of the object. Should pretty much only be used when the object is created
+// but it is left public in case a client needs to load old data or something
+func (q *Queue) Load(filename string) error {
+	file, err := os.Open(filename)
+	defer file.Close()
+	if err == nil {
+		decoder := json.NewDecoder(file)
+		q.lock.Lock()
+		err = decoder.Decode(&q.fifo)
+		q.lock.Unlock()
+	}
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Pop returns the audio resource next in the queue along with state flags.
@@ -72,6 +129,7 @@ func (q *Queue) Pop() (song *resource.Song, songReader io.ReadCloser, emptyq boo
 	// Discard top element
 	q.fifo = q.fifo[1:]
 	q.lock.Unlock()
+	q.Write(q.queueFilename)
 
 	// Resolve the resource ID in the queue
 	songReader, err := song.Resolve(q.ipfs)
@@ -98,7 +156,6 @@ func (q *Queue) IsEmpty() bool {
 // Add the provided song to the queue at the back
 func (q *Queue) AddToQueue(song *resource.Song) {
 	q.lock.Lock()
-	defer q.lock.Unlock()
 	for _, elem := range q.fifo {
 		if elem.URL() == song.URL() {
 			log.Printf("Tried to queue a duplicate (%s), rejecting", song.Title)
@@ -106,6 +163,8 @@ func (q *Queue) AddToQueue(song *resource.Song) {
 		}
 	}
 	q.fifo = append(q.fifo, song)
+	q.lock.Unlock()
+	q.Write(q.queueFilename)
 }
 
 // Add the provided song to the queue at the front
@@ -114,6 +173,7 @@ func (q *Queue) PlayNext(song *resource.Song) {
 	log.Printf("Adding %s(%s) to queue", song.Title, song.URL())
 	q.fifo = append([]*resource.Song{song}, q.fifo...)
 	q.lock.Unlock()
+	q.Write(q.queueFilename)
 }
 
 // Remove all items from the queue. Will not dump the encoder (current song)
@@ -121,6 +181,7 @@ func (q *Queue) Dump() {
 	q.lock.Lock()
 	q.fifo = make([]*resource.Song, 0)
 	q.lock.Unlock()
+	q.Write(q.queueFilename)
 }
 
 // Length returns the length of the real queue
