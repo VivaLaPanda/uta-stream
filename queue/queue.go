@@ -156,6 +156,7 @@ func (q *Queue) IsEmpty() bool {
 // Add the provided song to the queue at the back
 func (q *Queue) AddToQueue(song *resource.Song) {
 	q.lock.Lock()
+	log.Printf("Queueing %s", song.URL())
 	for _, elem := range q.fifo {
 		if elem.URL() == song.URL() {
 			log.Printf("Tried to queue a duplicate (%s), rejecting", song.Title)
