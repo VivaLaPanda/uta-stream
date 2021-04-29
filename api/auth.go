@@ -29,10 +29,10 @@ func NewAuthMiddleware(authConfigFile string, basePath string) (amw *authMiddlew
 		return authMiddleware, nil
 	}
 	configFile, err := os.Open(authConfigFile)
-	defer configFile.Close()
 	if err != nil {
 		return authMiddleware, fmt.Errorf("failed to initialize auth middleware: %v", err)
 	}
+	defer configFile.Close()
 
 	decoder := json.NewDecoder(configFile)
 	err = decoder.Decode(data)

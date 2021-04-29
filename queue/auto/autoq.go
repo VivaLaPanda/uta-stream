@@ -23,6 +23,7 @@ type AQEngine struct {
 
 	recent       []string
 	recentLength int
+	shuffle      bool
 }
 
 // How many minutes to wait between saves of the autoq state
@@ -39,7 +40,9 @@ func NewAQEngine(qfile string, cache *cache.Cache, chainbreakProb float64, prefi
 		playedSongs:  make(chan string),
 		cache:        cache,
 		recent:       make([]string, recentLength),
-		recentLength: recentLength}
+		recentLength: recentLength,
+		shuffle:      false,
+	}
 
 	// Confirm we can interact with our persitent storage
 	_, err := os.Stat(qfile)
@@ -114,6 +117,12 @@ func (q *AQEngine) Vpop() (*resource.Song, error) {
 // In our case we use it to notify the chain that a song was played in full
 // learn from allows you to advance the chain without adding data if false
 func (q *AQEngine) NotifyPlayed(resourceID string, learnFrom bool) {
+	// if shuffle flag is set, ignore the song being given and just
+	// pick a random one
+	if q.shuffle {
+		resourceID = q.markovChain.getRandom()
+	}
+
 	// Put it in the recent so we don't play it again too soon
 	q.pushRecent(resourceID)
 
@@ -122,25 +131,27 @@ func (q *AQEngine) NotifyPlayed(resourceID string, learnFrom bool) {
 
 	key := q.markovChain.prefix.String()
 	// Don't put more than one of the same song in the predict list
-	duplicate := false
-	for _, value := range (*q.markovChain.chainData)[key] {
-		if value == resourceID {
-			duplicate = true
+	if learnFrom {
+		duplicate := false
+		for _, value := range (*q.markovChain.chainData)[key] {
+			if value == resourceID {
+				duplicate = true
+			}
 		}
-	}
 
-	if !duplicate && learnFrom {
-		// Make sure we aren't creating a loop
-		if key != resourceID {
-			log.Printf("Adding new song %s to autoqueuer\n", resourceID)
-			(*q.markovChain.chainData)[key] = append((*q.markovChain.chainData)[key], resourceID)
+		if !duplicate {
+			// Make sure we aren't creating a loop
+			if key != resourceID {
+				log.Printf("Adding new song %s to autoqueuer\n", resourceID)
+				(*q.markovChain.chainData)[key] = append((*q.markovChain.chainData)[key], resourceID)
+			}
 		}
 	}
 	q.markovChain.prefix.shift(resourceID)
 }
 
 func (q *AQEngine) Shuffle() {
-	q.NotifyPlayed(q.markovChain.getRandom(), false)
+	q.shuffle = true
 }
 
 func (q *AQEngine) generateFresh() (song string) {

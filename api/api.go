@@ -38,7 +38,7 @@ var (
 // modifies the state of the server. Several components are passed in and then
 // requests to the API translate into operations against those components
 // This function call will block the caller until the server is killed
-func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, port int, authCfgFilename string) {
+func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, listenerCount func() int, port int, authCfgFilename string) {
 	logger := log.New(os.Stdout, "http: ", log.LstdFlags)
 	logger.Println("Server is starting...")
 
@@ -70,7 +70,7 @@ func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, port int, authCfgF
 		Methods("PUT")
 	router.Handle("/pause", pause(m)).
 		Methods("PUT")
-	router.Handle("/playing", playing(m, q)).
+	router.Handle("/playing", playing(m, q, listenerCount)).
 		Methods("GET")
 	router.NotFoundHandler = http.HandlerFunc(notFound)
 
@@ -234,7 +234,7 @@ func pause(e *mixer.Mixer) http.Handler {
 	})
 }
 
-func playing(m *mixer.Mixer, q *queue.Queue) http.Handler {
+func playing(m *mixer.Mixer, q *queue.Queue, listenerCount func() int) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		// Note that these string cats are less expensive than they look
@@ -245,13 +245,15 @@ func playing(m *mixer.Mixer, q *queue.Queue) http.Handler {
 		queued := q.GetQueue()
 
 		respStruct := struct {
-			CurrentSong *resource.Song   `json:"currentSong"`
-			Upcoming    []*resource.Song `json:"upcoming"`
-			Dj          string           `json:"dj"`
+			CurrentSong   *resource.Song   `json:"currentSong"`
+			Upcoming      []*resource.Song `json:"upcoming"`
+			Dj            string           `json:"dj"`
+			ListenerCount int              `json:"listenerCount"`
 		}{
 			m.CurrentSongInfo,
 			queued,
 			"",
+			listenerCount(),
 		}
 
 		respString, err := json.Marshal(respStruct)

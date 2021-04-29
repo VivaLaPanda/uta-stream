@@ -35,5 +35,6 @@ func main() {
 	go func() {
 		stream.ServeAudioOverHttp(e.Output, *audioPort)
 	}()
-	api.ServeApi(e, c, q, *apiPort, *authCfgFilename)
+
+	api.ServeApi(e, c, q, stream.ListenerCount, *apiPort, *authCfgFilename)
 }

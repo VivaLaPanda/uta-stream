@@ -144,7 +144,7 @@ func byteReader(r io.ReadCloser, ch chan []byte, bytesPerSecond int) chan bool {
 	}
 
 	// Bump content rate to account for misc slowdown
-	bytesPerSecond += 300
+	bytesPerSecond += 50
 
 	done := make(chan bool)
 

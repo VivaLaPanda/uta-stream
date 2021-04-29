@@ -50,12 +50,12 @@ func TestValidateToken(t *testing.T) {
 		t.Errorf("Middleware should be enabled, was given valid file\n")
 	}
 
-	valid := amw.validateToken("Bearer foo", "enqueue")
+	valid := amw.ValidateToken("Bearer foo", "enqueue")
 	if !valid {
 		t.Errorf("Route should match token's \n")
 	}
 
-	valid = amw.validateToken("Bearer su", "enqueue")
+	valid = amw.ValidateToken("Bearer su", "enqueue")
 	if !valid {
 		t.Errorf("Route should match token's \n")
 	}

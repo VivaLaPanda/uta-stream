@@ -86,6 +86,10 @@ func generateNewStream(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func ListenerCount() int {
+	return len(consumers)
+}
+
 func ServeAudioOverHttp(inputAudio <-chan []byte, port int) {
 	/* Net listener */
 	n := "tcp"
@@ -125,15 +129,23 @@ func ServeAudioOverHttp(inputAudio <-chan []byte, port int) {
 			// far ahead
 			time.Sleep(500 * time.Millisecond)
 
-			for _, consumer := range consumers {
+			badConsumerCounter := make(map[string]int, len(consumers))
+
+			for id, consumer := range consumers {
 				select {
 				case consumer <- audioBytes:
 					// Send was good, do nothing
 				default:
+					// Consumers that refuse to consume data will eventually cause a fatal overflow
+					// If a consumer repeatedly fails, forcibly disconnect them.
 					log.Printf("Overburdened consumer")
-					// Send failed, we don't care
-					// This indicates an overburdened connection and will cause dropped
-					// audio
+
+					badConsumerCounter[id] += 1
+					if badConsumerCounter[id] > 10 {
+						delete(badConsumerCounter, id)
+
+						killConsumer <- id
+					}
 				}
 			}
 
