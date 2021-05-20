@@ -15,12 +15,14 @@ func TestSplitAudio(t *testing.T) {
 	convInput, convOutput, convProgress, err := splitAudio()
 	if err != nil {
 		t.Errorf("testsplitaudio failed due to an error: %v", err)
+		return
 	}
 
 	go func() {
 		_, err := io.Copy(convInput, inputFile)
 		if err != nil {
 			t.Errorf("failed to copy audio from input into converter: %v", err)
+			return
 		}
 		convInput.Close()
 		inputFile.Close()
@@ -29,6 +31,7 @@ func TestSplitAudio(t *testing.T) {
 		_, err := io.Copy(outputFile, convOutput)
 		if err != nil {
 			t.Errorf("failed to copy audio from converter into output: %v", err)
+			return
 		}
 		convOutput.Close()
 		outputFile.Close()
@@ -40,8 +43,6 @@ func TestDownloadYoutube(t *testing.T) {
 	rawUrl := "https://youtu.be/nAwTw1aYy6M"
 	ipfsUrl := "localhost:5001"
 
-	t.Errorf("%s", os.RemoveAll("TEMP-DL"))
-
 	// Setup shell and testing url
 	ipfs := shell.NewShell(ipfsUrl)
 	songToTest, _ := resource.NewSong(rawUrl, false)
@@ -50,16 +51,19 @@ func TestDownloadYoutube(t *testing.T) {
 	song, err := downloadYoutube(songToTest, ipfs)
 	if err != nil {
 		t.Errorf("TestDownloadYoutube failed due to an error: %v", err)
+		return
 	}
 
 	_, err = song.Resolve(ipfs)
 	if err != nil {
 		t.Errorf("TestDownloadYoutube failed due to an error: %v", err)
+		return
 	}
 
 	expectedTitle := "1080 Hz Sine Wave 30 sec"
 	if song.Title != expectedTitle {
 		t.Errorf("Song title doesn't equal expected. e: %s, a:%s\n", expectedTitle, song.Title)
+		return
 	}
 
 }
@@ -75,7 +79,8 @@ func TestDownloadMP3(t *testing.T) {
 	// Commence the download
 	song, err := downloadMp3(songToTest, ipfs)
 	if err != nil {
-		t.Errorf("TestDownloadYoutube failed due to an error: %v", err)
+		t.Errorf("TestDownloadMP3 failed due to an error: %v", err)
+		return
 	}
 
 	song.Resolve(ipfs)

@@ -66,10 +66,6 @@ func ServeApi(m *mixer.Mixer, c *cache.Cache, q *queue.Queue, listenerCount func
 		Methods("POST")
 	router.Handle("/shuffle", shuffle(m, q)).
 		Methods("POST")
-	router.Handle("/play", play(m)).
-		Methods("PUT")
-	router.Handle("/pause", pause(m)).
-		Methods("PUT")
 	router.Handle("/playing", playing(m, q, listenerCount)).
 		Methods("GET")
 	router.NotFoundHandler = http.HandlerFunc(notFound)
@@ -214,23 +210,6 @@ func shuffle(e *mixer.Mixer, q *queue.Queue) http.Handler {
 		e.Skip()
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "{\"message\":\"autoq shuffled successfully\"}")
-	})
-}
-
-func play(e *mixer.Mixer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		e.Play()
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "{\"message\":\"state changed to played successfully\"}")
-	})
-}
-
-func pause(e *mixer.Mixer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		e.Pause()
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "{\"message\":\" paused successfully\"}")
 	})
 }
 

@@ -58,7 +58,7 @@ func NewQueue(aqEngine *auto.AQEngine, enableAutoq bool, ipfsUrl string) *Queue 
 // Method which will write the autoq data to the provided file. Will overwrite
 // a file if one already exists at that location.
 func (q *Queue) Write(filename string) error {
-	qfile, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0660)
+	qfile, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0660)
 	defer qfile.Close()
 	if err != nil {
 		return err
@@ -135,7 +135,7 @@ func (q *Queue) Pop() (song *resource.Song, songReader io.ReadCloser, emptyq boo
 	songReader, err := song.Resolve(q.ipfs)
 	if err != nil {
 		log.Printf("Issue when resolving resource from Queue. Err: %v\n", err)
-		return q.Pop()
+		return song, nil, false, fromAuto
 	}
 
 	return song, songReader, false, fromAuto

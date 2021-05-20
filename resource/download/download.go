@@ -221,14 +221,14 @@ func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, er
 		log.Printf("Queuing download of mp4 from %v\n", song.URL().String())
 		maxYTDownloaders <- 0
 		log.Printf("Starting download of mp4 from %v\n", song.URL().String())
-		rawRespStream, err := dlClient.GetStream(vidInfo, bestFormat)
+		rawRespStream, _, err := dlClient.GetStream(vidInfo, bestFormat)
 		if err != nil {
 			dlError <- fmt.Errorf("ytdl encountered an error: %v\n", err)
 			return
 		}
-		defer rawRespStream.Body.Close()
+		defer rawRespStream.Close()
 
-		io.Copy(convInput, rawRespStream.Body)
+		io.Copy(convInput, rawRespStream)
 		defer convInput.Close()
 
 		log.Printf("Downloading of %v complete\n", song.URL().String())

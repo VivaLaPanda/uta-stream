@@ -16,7 +16,7 @@ import (
 var bufferSize int64 = 10000 //kb
 
 type Song struct {
-	ipfsPath      string `json:"currentSong"`
+	ipfsPath      string
 	url           *url.URL
 	Title         string
 	Duration      time.Duration

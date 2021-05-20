@@ -132,13 +132,15 @@ func (c *Cache) handleUncachedUrl(song *resource.Song, url string, ipfs *shell.S
 
 	// Cache the song once we've resolved it into a playable resource
 	go func() {
-		_, err = song.Resolve(ipfs)
+		reader, err := song.Resolve(ipfs)
 
 		// Double check we have an ipfs path registered
 		if err == nil && song.IpfsPath() != "" {
 			(*c.songMap)[url] = song
 			c.Write(c.cacheFilename)
 		}
+
+		reader.Close()
 	}()
 
 	return song, err

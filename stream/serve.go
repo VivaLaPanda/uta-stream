@@ -48,15 +48,15 @@ func generateNewStream(w http.ResponseWriter, req *http.Request) {
 	// Register stream
 	mediaConsumer := make(chan []byte, 4)
 	consumerID := randIDGenerator(32)
-	//defer func() { killConsumer <- consumerID }()
+
 	consumerWLock.Lock()
 	consumers[consumerID] = mediaConsumer
 	consumerWLock.Unlock()
 
 	// If the connection is closed, kill the consumer
-	notify := w.(http.CloseNotifier).CloseNotify()
+	done := req.Context().Done()
 	go func() {
-		<-notify
+		<-done
 		log.Printf("User %s disconnected", req.RemoteAddr)
 		killConsumer <- consumerID
 	}()
@@ -104,15 +104,7 @@ func ServeAudioOverHttp(inputAudio <-chan []byte, port int) {
 	// below already enters it in the loop
 	// TODO: Fix that race condition https://github.com/VivaLaPanda/uta-stream/issues/2
 	go func() {
-		for idToKill := range killConsumer {
-			chanCopy := consumers[idToKill]
 
-			consumerWLock.Lock()
-			delete(consumers, idToKill)
-			consumerWLock.Unlock()
-
-			close(chanCopy)
-		}
 	}()
 
 	// Init fifo queue of size 3
@@ -131,7 +123,21 @@ func ServeAudioOverHttp(inputAudio <-chan []byte, port int) {
 
 			badConsumerCounter := make(map[string]int, len(consumers))
 
+			// If we've been given a kill signal for a consumer handle that now
+			select {
+			case consumerToKill := <-killConsumer:
+				chanCopy := consumers[consumerToKill]
+
+				consumerWLock.Lock()
+				delete(consumers, consumerToKill)
+				consumerWLock.Unlock()
+
+				close(chanCopy)
+			default:
+			}
+
 			for id, consumer := range consumers {
+
 				select {
 				case consumer <- audioBytes:
 					// Send was good, do nothing

@@ -9,7 +9,6 @@ package mixer
 import (
 	"io"
 	"log"
-	"sync"
 	"time"
 
 	"github.com/VivaLaPanda/uta-stream/mp3"
@@ -25,7 +24,7 @@ type Mixer struct {
 	currentSongData io.ReadCloser
 	queue           *queue.Queue
 	CurrentSongInfo *resource.Song
-	playLock        *sync.Mutex
+	skipped         bool
 	learnFrom       bool
 }
 
@@ -43,8 +42,9 @@ func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 		currentSongData: nil,
 		queue:           queue,
 		CurrentSongInfo: &resource.Song{},
-		playLock:        &sync.Mutex{},
-		learnFrom:       false}
+		skipped:         false,
+		learnFrom:       false,
+	}
 
 	// Prep to encode the mp3
 	wavInput, mp3Output, _, err := mp3.WavToMp3(mixer.bitrate)
@@ -78,13 +78,37 @@ func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 			// Check if we even have anything to try and play
 			if mixer.currentSongData != nil {
 				// Take the current song and put it into the encoder
-				io.Copy(wavInput, mixer.currentSongData)
+				_, err = io.Copy(wavInput, mixer.currentSongData)
+
+				if err != nil {
+					// If we skipped we'll always get an error, so ignore it
+					if !mixer.skipped {
+						log.Printf("Error copying into mixer output: %v\n", err)
+					}
+				}
+
+				// Avoid double closes, if we skipped we already closed the reader
+				// Seems like there should be a better way...
+				if !mixer.skipped {
+					// testing without reader close
+					mixer.currentSongData.Close()
+				}
+				mixer.skipped = false
+
 				// We couldn't play from current, assume that the song ended
 				// Also, if we just recieved a skip, then we don't want to use that
 				// song to train qutoq
 				if mixer.CurrentSongInfo.IpfsPath() != "" {
 					mixer.queue.NotifyDone(mixer.CurrentSongInfo.IpfsPath(), mixer.learnFrom)
 				}
+
+				// Put a placeholder in the song info in case the next fetch
+				// from the ipfs takes a long time
+				mixer.CurrentSongInfo = &resource.Song{
+					Title:    "Loading Next Song",
+					Duration: 0,
+				}
+
 				mixer.learnFrom = true
 			}
 		}
@@ -98,27 +122,14 @@ func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 func (m *Mixer) Skip() {
 	// We *could* get a close on closed channel error, which we want to ignore.
 	defer func() {
-		recover()
+		if wasPanic := recover(); wasPanic != nil {
+			log.Printf("Close on closed channel error. THIS IS BAD IT SHOULDN'T HAPPEN!!\n")
+		}
 	}()
 
-	m.currentSongData.Close()
+	m.skipped = true
 	m.learnFrom = false
-}
-
-// Will allow playing by allowing writes to output
-func (m *Mixer) Play() {
-	m.playLock.Unlock()
-}
-
-// Will stop playing by preventing writes to output
-// TODO: FiX THIS. BORKED AS HELL https://github.com/VivaLaPanda/uta-stream/issues/3
-// If people keep calling pause then it will keep spawning deadlocked routines
-// until someone hits play, at which point all extra paused routines will die
-// Need someway to check mutex or some different pause approach entirely
-func (m *Mixer) Pause() {
-	go func() {
-		m.playLock.Lock()
-	}()
+	m.currentSongData.Close()
 }
 
 // Will go to queue and get the next track and associated metadata
