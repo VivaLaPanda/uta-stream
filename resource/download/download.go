@@ -41,7 +41,7 @@ func Download(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error) {
 		// Get the ext
 		ext := path.Ext(song.URL().Path)
 
-		if ext == ".mp3" {
+		if ext == ".mp3" || ext == ".flac" {
 			return downloadMp3(song, ipfs)
 		}
 

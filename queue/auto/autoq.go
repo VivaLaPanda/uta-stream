@@ -121,6 +121,7 @@ func (q *AQEngine) NotifyPlayed(resourceID string, learnFrom bool) {
 	// pick a random one
 	if q.shuffle {
 		resourceID = q.markovChain.getRandom()
+		q.shuffle = false
 	}
 
 	// Put it in the recent so we don't play it again too soon

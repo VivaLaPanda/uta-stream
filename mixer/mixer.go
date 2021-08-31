@@ -83,7 +83,10 @@ func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 				if err != nil {
 					// If we skipped we'll always get an error, so ignore it
 					if !mixer.skipped {
+						// We can't send data to the encoder for some reason
+						// This usually means ffmpeg is struggling. Let's give it a break
 						log.Printf("Error copying into mixer output: %v\n", err)
+						time.Sleep(10 * time.Second)
 					}
 				}
 
@@ -155,7 +158,7 @@ func byteReader(r io.ReadCloser, ch chan []byte, bytesPerSecond int) chan bool {
 	}
 
 	// Bump content rate to account for misc slowdown
-	bytesPerSecond += 50
+	bytesPerSecond += 25
 
 	done := make(chan bool)
 
