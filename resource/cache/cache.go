@@ -140,7 +140,9 @@ func (c *Cache) handleUncachedUrl(song *resource.Song, url string, ipfs *shell.S
 			c.Write(c.cacheFilename)
 		}
 
-		reader.Close()
+		if reader != nil {
+			reader.Close()
+		}
 	}()
 
 	return song, err
