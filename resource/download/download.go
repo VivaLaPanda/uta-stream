@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"path"
@@ -45,9 +46,19 @@ func Download(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error) {
 			return downloadMp3(song, ipfs)
 		}
 
-		return song, fmt.Errorf("URL hostname (%v) doesn't match a known provider.\n"+
-			"Should be one of: %v\n", song.URL().Hostname(), knownProviders)
+		return song, fmt.Errorf("URL hostname (%v) doesn't match a known provider."+
+			"Should be one of: %v", song.URL().Hostname(), knownProviders)
 	}
+}
+
+var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func randSeq(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
 }
 
 func downloadMp3(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error) {
@@ -63,7 +74,7 @@ func downloadMp3(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error)
 	output, input := io.Pipe()
 
 	// Prepare the mp3 file we'll write to
-	fileLocation := filepath.Join(tempDLFolder, filename)
+	fileLocation := filepath.Join(tempDLFolder, filename, randSeq(4))
 	_ = os.MkdirAll(filepath.Dir(fileLocation), os.ModePerm)
 
 	// if the file already exists it's been queued already and is being downloaded
@@ -87,7 +98,7 @@ func downloadMp3(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error)
 		// Get the data
 		resp, err := http.Get(song.URL().String())
 		if err != nil {
-			dlError <- fmt.Errorf("MP3 DL encountered an error: %v\n", err)
+			dlError <- fmt.Errorf("MP3 DL encountered an error: %v", err)
 			return
 		}
 		defer resp.Body.Close()
@@ -123,14 +134,14 @@ func downloadMp3(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error)
 		// BLock until DL finishes, nil for success, else will be an error
 		err := <-dlError
 		if err != nil {
-			song.DLFailure <- fmt.Errorf("failed to download %s. Err: %v\n", song.URL().String(), err)
+			song.DLFailure <- fmt.Errorf("failed to download %s. Err: %v", song.URL().String(), err)
 			return
 		}
 
 		// Add to ipfs
 		ipfsPath, err := addToIpfs(fileLocation, ipfs)
 		if err != nil {
-			song.DLFailure <- fmt.Errorf("failed to add %s to IPFS. Err: %v\n", song.URL().String(), err)
+			song.DLFailure <- fmt.Errorf("failed to add %s to IPFS. Err: %v", song.URL().String(), err)
 			return
 		}
 		song.DLResult <- ipfsPath
@@ -198,7 +209,7 @@ func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, er
 	}
 
 	// Prepare the mp3 file we'll write to
-	fileLocation := filepath.Join(tempDLFolder, vidInfo.ID+".mp3")
+	fileLocation := filepath.Join(tempDLFolder, vidInfo.ID+randSeq(4)+".mp3")
 	_ = os.MkdirAll(filepath.Dir(fileLocation), os.ModePerm)
 
 	// if the file already exists it's been queued already and is being downloaded
@@ -223,7 +234,7 @@ func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, er
 		log.Printf("Starting download of mp4 from %v\n", song.URL().String())
 		rawRespStream, _, err := dlClient.GetStream(vidInfo, bestFormat)
 		if err != nil {
-			dlError <- fmt.Errorf("ytdl encountered an error: %v\n", err)
+			dlError <- fmt.Errorf("ytdl encountered an error: %v", err)
 			return
 		}
 		defer rawRespStream.Close()
@@ -262,7 +273,7 @@ func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, er
 		// BLock until DL finishes, nil for success, else will be an error
 		err := <-dlError
 		if err != nil {
-			song.DLFailure <- fmt.Errorf("failed to download %s. Err: %v\n", song.URL().String(), err)
+			song.DLFailure <- fmt.Errorf("failed to download %s. Err: %v", song.URL().String(), err)
 			return
 		}
 
@@ -272,7 +283,7 @@ func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, er
 		// Add to ipfs
 		ipfsPath, err := addToIpfs(fileLocation, ipfs)
 		if err != nil {
-			song.DLFailure <- fmt.Errorf("failed to add %s to IPFS. Err: %v\n", song.URL().String(), err)
+			song.DLFailure <- fmt.Errorf("failed to add %s to IPFS. Err: %v", song.URL().String(), err)
 			return
 		}
 		song.DLResult <- ipfsPath
@@ -304,18 +315,18 @@ func FetchIpfs(ipfsPath string, ipfs *shell.Shell) (r io.ReadCloser, err error) 
 func addToIpfs(fileLocation string, ipfs *shell.Shell) (ipfsPath string, err error) {
 	mp3File, err := os.Open(fileLocation)
 	if err != nil {
-		return "", fmt.Errorf("Failed to open downloaded mp3. Err: %v\n", err)
+		return "", fmt.Errorf("failed to open downloaded mp3. Err: %v", err)
 	}
 
 	fileInfo, _ := os.Stat(fileLocation)
 
 	if fileInfo.Size() == 0 {
-		return "", fmt.Errorf("File was 0 bytes, didn didn't cache.\n")
+		return "", fmt.Errorf("file was 0 bytes, didn't cache")
 	}
 
 	ipfsPath, err = ipfs.Add(mp3File)
 	if err != nil {
-		return "", fmt.Errorf("Failed to add to IPFS. Err: %v\n", err)
+		return "", fmt.Errorf("failed to add to IPFS. Err: %v", err)
 	}
 
 	// Formatting as proper ipfs path, not just hash

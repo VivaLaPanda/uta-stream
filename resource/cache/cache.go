@@ -25,7 +25,7 @@ type Cache struct {
 
 // Used to limit how many ongoing downloads we have. useful to make sure
 // Youtube doesn't get mad at us
-var maxActiveDownloads = 1
+var maxActiveDownloads = 2
 
 // Function which will provide a new cache struct
 // An cache must be provided a file that it can read/write it's data to
@@ -62,10 +62,10 @@ func NewCache(cacheFilename string, ipfsUrl string) *Cache {
 // a file if one already exists at that location.
 func (c *Cache) Write(filename string) error {
 	cacheFilename, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE, 0660)
-	defer cacheFilename.Close()
 	if err != nil {
 		return err
 	}
+	defer cacheFilename.Close()
 
 	encoder := json.NewEncoder(cacheFilename)
 	encoder.Encode(c.songMap)
@@ -78,15 +78,15 @@ func (c *Cache) Write(filename string) error {
 // but it is left public in case a client needs to load old data or something
 func (c *Cache) Load(filename string) error {
 	file, err := os.OpenFile(filename, os.O_RDONLY, 0660)
-	defer file.Close()
 	if err != nil {
 		return err
 	}
+	defer file.Close()
 
 	decoder := json.NewDecoder(file)
 	err = decoder.Decode(c.songMap)
 
-	return nil
+	return err
 }
 
 // UrlCacheLookup will check the cache for the provided url, but on a cache miss
@@ -95,7 +95,7 @@ func (c *Cache) Lookup(resourceID string, urgent bool) (song *resource.Song, err
 	// normalize and create default song to store data in
 	resourceID, err = urlNormalize(resourceID)
 	if err != nil {
-		return nil, fmt.Errorf("Provided resource is an unrecognized format: %v. \nErr: %v", resourceID, err)
+		return nil, fmt.Errorf("provided resource is an unrecognized format: %v. \nErr: %v", resourceID, err)
 	}
 	song, err = resource.NewSong(resourceID, urgent)
 	if err != nil {
@@ -125,23 +125,22 @@ func (c *Cache) Lookup(resourceID string, urgent bool) (song *resource.Song, err
 }
 
 func (c *Cache) handleUncachedUrl(song *resource.Song, url string, ipfs *shell.Shell) (*resource.Song, error) {
+	c.activeDownloads <- true
 	song, err := download.Download(song, ipfs)
 	if err != nil {
+		<-c.activeDownloads
 		return song, err
 	}
 
 	// Cache the song once we've resolved it into a playable resource
 	go func() {
-		reader, err := song.Resolve(ipfs)
+		_, err := song.Resolve(ipfs)
+		<-c.activeDownloads
 
 		// Double check we have an ipfs path registered
 		if err == nil && song.IpfsPath() != "" {
 			(*c.songMap)[url] = song
 			c.Write(c.cacheFilename)
-		}
-
-		if reader != nil {
-			reader.Close()
 		}
 	}()
 
