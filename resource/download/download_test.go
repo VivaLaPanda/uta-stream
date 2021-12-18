@@ -45,7 +45,7 @@ func TestDownloadYoutube(t *testing.T) {
 
 	// Setup shell and testing url
 	ipfs := shell.NewShell(ipfsUrl)
-	songToTest, _ := resource.NewSong(rawUrl, false)
+	songToTest, _ := resource.NewSong(rawUrl)
 
 	// Commence the download
 	song, err := downloadYoutube(songToTest, ipfs)
@@ -74,7 +74,7 @@ func TestDownloadMP3(t *testing.T) {
 
 	// Setup shell and testing url
 	ipfs := shell.NewShell(ipfsUrl)
-	songToTest, _ := resource.NewSong(rawUrl, false)
+	songToTest, _ := resource.NewSong(rawUrl)
 
 	// Commence the download
 	song, err := downloadMp3(songToTest, ipfs)

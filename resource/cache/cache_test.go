@@ -55,7 +55,7 @@ func TestLoad(t *testing.T) {
 		return
 	}
 
-	testSong, _ := resource.NewSong(testIpfsPath, false)
+	testSong, _ := resource.NewSong(testIpfsPath)
 	(*c.songMap)["foo"] = testSong
 
 	// Try write and loading
@@ -100,7 +100,7 @@ func TestLookup(t *testing.T) {
 	ipfs := shell.NewShell(ipfsUrl)
 
 	// Lookup the url, the result shouldn't be able to find the IPFS url right away
-	song, _ := c.Lookup(testUrl, false)
+	song, _ := c.Lookup(testUrl)
 	if resourceID := song.ResourceID(); resourceID != testUrl {
 		t.Errorf("cache lookup resulted in incorrect resourceID")
 	}
@@ -109,12 +109,12 @@ func TestLookup(t *testing.T) {
 	_, _ = song.Resolve(ipfs)
 	// Avodiing tiny race condition where cache lookup right after resolve might fail
 	time.Sleep(500 * time.Millisecond)
-	song, _ = c.Lookup(testUrl, false)
+	song, _ = c.Lookup(testUrl)
 	if resourceID := song.ResourceID(); resourceID != testIpfsPath {
 		t.Errorf("cache didn't find url even after it should have stored")
 	}
 
-	song, _ = c.Lookup(testIpfsPath, false)
+	song, _ = c.Lookup(testIpfsPath)
 	if resourceID := song.ResourceID(); resourceID != testIpfsPath {
 		t.Errorf("cache lookup resulted in incorrect resourceID")
 	}

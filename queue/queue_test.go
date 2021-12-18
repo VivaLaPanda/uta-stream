@@ -16,8 +16,8 @@ var (
 )
 
 func init() {
-	testSongA, _ = resource.NewSong("/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf", false)
-	testSongB, _ = resource.NewSong("/ipfs/QmeFmYKQD6ky5d2uB7qSBBDpo8XtSP3iSfATEpxj6KULSX", false)
+	testSongA, _ = resource.NewSong("/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf")
+	testSongB, _ = resource.NewSong("/ipfs/QmeFmYKQD6ky5d2uB7qSBBDpo8XtSP3iSfATEpxj6KULSX")
 }
 
 func cleanup(file string) {

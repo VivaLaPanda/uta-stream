@@ -8,28 +8,16 @@ import (
 
 func TestNewSong(t *testing.T) {
 	rawUrl := "https://youtu.be/nAwTw1aYy6M"
-	testSongA, _ := NewSong(rawUrl, false)
-	testSongB, _ := NewSong(rawUrl, true)
+	testSongA, _ := NewSong(rawUrl)
 
 	if testSongA.Writer != nil {
 		t.Errorf("testSongA has a writer and shouldn't")
-	}
-	if testSongB.Writer == nil {
-		t.Errorf("testSongB doesn't have a writer and should")
-	}
-
-	input := []byte("foo")
-	output := make([]byte, 3)
-	testSongB.Writer.Write(input)
-	testSongB.reader.Read(output)
-	if output[0] != []byte("f")[0] {
-		t.Errorf("Reader output didn't match writer input.")
 	}
 }
 
 func TestJson(t *testing.T) {
 	rawUrl := "https://youtu.be/nAwTw1aYy6M"
-	testSongA, _ := NewSong(rawUrl, false)
+	testSongA, _ := NewSong(rawUrl)
 
 	json, err := testSongA.MarshalJSON()
 	if err != nil {
@@ -47,7 +35,7 @@ func TestJson(t *testing.T) {
 
 func TestResourceID(t *testing.T) {
 	rawUrl := "https://youtu.be/nAwTw1aYy6M"
-	song, _ := NewSong(rawUrl, false)
+	song, _ := NewSong(rawUrl)
 	resourceID := song.ResourceID()
 	isCached := IsIpfs(resourceID)
 	if resourceID != rawUrl {
@@ -81,17 +69,11 @@ func TestResolve(t *testing.T) {
 
 	// Setup shell and testing url
 	sh := shell.NewShell(ipfsUrl)
-	song, _ := NewSong(rawUrl, false)
+	song, _ := NewSong(rawUrl)
 
 	expectedIpfs := "/ipfs/QmQmjmsqhvTNsvZGrwBMhGEX5THCoWs2GWjszJ48tnr3Uf"
 	song.DLResult <- expectedIpfs
 	reader, err := song.Resolve(sh)
-	if reader == nil {
-		t.Errorf("Resolve failed to produce a reader. Err: %s", err)
-	}
-
-	song, _ = NewSong(rawUrl, true)
-	reader, err = song.Resolve(sh)
 	if reader == nil {
 		t.Errorf("Resolve failed to produce a reader. Err: %s", err)
 	}

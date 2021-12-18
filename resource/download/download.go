@@ -3,7 +3,6 @@
 package download
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -112,18 +111,9 @@ func downloadMp3(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error)
 
 	// Read from converter and write to the file and potentially the provided hotWriter
 	go func() {
-		var sharedReader io.Reader
-		bufStreamData := bufio.NewWriter(song.Writer)
-		if song.Writer != nil {
-			sharedReader = io.TeeReader(output, bufStreamData)
-		} else {
-			sharedReader = output
-		}
-
-		io.Copy(mp3File, sharedReader)
+		io.Copy(mp3File, output)
 		output.Close()
 		if song.Writer != nil {
-			bufStreamData.Flush()
 			song.Writer.Close()
 		}
 		mp3File.Close()
@@ -250,19 +240,11 @@ func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, er
 	// Read from converter and write to the file and potentially the provided hotWriter
 	go func() {
 		log.Printf("Converting %s mp4 to mp3\n", song.URL().String())
-		var sharedReader io.Reader
-		bufStreamData := bufio.NewWriter(song.Writer)
-		if song.Writer != nil {
-			sharedReader = io.TeeReader(convOutput, bufStreamData)
-		} else {
-			sharedReader = convOutput
-		}
 
-		io.Copy(mp3File, sharedReader)
+		io.Copy(mp3File, convOutput)
 		log.Printf("Conversion of %s to mp3 complete\n", song.URL().String())
 		convOutput.Close()
 		if song.Writer != nil {
-			bufStreamData.Flush()
 			song.Writer.Close()
 		}
 		mp3File.Close()

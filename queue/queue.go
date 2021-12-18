@@ -59,7 +59,7 @@ func NewQueue(aqEngine *auto.AQEngine, cache *cache.Cache, enableAutoq bool, ipf
 	// songs that never got resolved. Try to go and do that
 	for idx, song := range q.fifo {
 		if song.IpfsPath() == "" && song.URL() != nil {
-			tempSong, err := cache.Lookup(song.URL().String(), false)
+			tempSong, err := cache.Lookup(song.URL().String())
 			if err != nil {
 				log.Printf("Failed to resume downloading of song in queue.\nErr: %v\n", err)
 			} else {

@@ -9,8 +9,6 @@ import (
 	"time"
 
 	shell "github.com/ipfs/go-ipfs-api"
-	"gopkg.in/djherbis/buffer.v1"
-	"gopkg.in/djherbis/nio.v2"
 )
 
 var bufferSize int64 = 10000 //kb
@@ -28,7 +26,7 @@ type Song struct {
 	resolutionErr error
 }
 
-func NewSong(resourceID string, hotwriter bool) (song *Song, err error) {
+func NewSong(resourceID string) (song *Song, err error) {
 	song = &Song{
 		ipfsPath:  "",
 		url:       nil,
@@ -46,11 +44,6 @@ func NewSong(resourceID string, hotwriter bool) (song *Song, err error) {
 		if err != nil {
 			return nil, fmt.Errorf("ResourceID can't be used to make song. Err: %s", err)
 		}
-	}
-
-	if hotwriter {
-		buf := buffer.New(bufferSize * 1024) // In memory Buffer
-		song.reader, song.Writer = nio.Pipe(buf)
 	}
 
 	// Start making sure the song is playable

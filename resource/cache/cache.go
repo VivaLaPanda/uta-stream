@@ -85,13 +85,13 @@ func (c *Cache) Load(filename string) error {
 
 // UrlCacheLookup will check the cache for the provided url, but on a cache miss
 // it will download the resource and add it to the cache, then return the hash
-func (c *Cache) Lookup(resourceID string, urgent bool) (song *resource.Song, err error) {
+func (c *Cache) Lookup(resourceID string) (song *resource.Song, err error) {
 	// normalize and create default song to store data in
 	resourceID, err = urlNormalize(resourceID)
 	if err != nil {
 		return nil, fmt.Errorf("provided resource is an unrecognized format: %v. \nErr: %v", resourceID, err)
 	}
-	song, err = resource.NewSong(resourceID, urgent)
+	song, err = resource.NewSong(resourceID)
 	if err != nil {
 		return nil, err
 	}

@@ -77,10 +77,11 @@ func NewAQEngine(qfile string, cache *cache.Cache, chainbreakProb float64, prefi
 // a file if one already exists at that location.
 func (q *AQEngine) Write(filename string) error {
 	qfile, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0660)
-	defer qfile.Close()
 	if err != nil {
 		return err
 	}
+	defer qfile.Close()
+
 	encoder := gob.NewEncoder(qfile)
 	q.markovChain.chainLock.RLock()
 	encoder.Encode(q.markovChain.chainData)
@@ -94,13 +95,16 @@ func (q *AQEngine) Write(filename string) error {
 // but it is left public in case a client needs to load old data or something
 func (q *AQEngine) Load(filename string) error {
 	file, err := os.Open(filename)
-	defer file.Close()
-	if err == nil {
-		decoder := gob.NewDecoder(file)
-		q.markovChain.chainLock.Lock()
-		err = decoder.Decode(q.markovChain.chainData)
-		q.markovChain.chainLock.Unlock()
+	if err != nil {
+		return err
 	}
+	defer file.Close()
+
+	decoder := gob.NewDecoder(file)
+	q.markovChain.chainLock.Lock()
+	err = decoder.Decode(q.markovChain.chainData)
+	q.markovChain.chainLock.Unlock()
+
 	if err != nil {
 		return err
 	}
@@ -110,7 +114,7 @@ func (q *AQEngine) Load(filename string) error {
 
 // Vpop simply returns the next song according to the Markov chain
 func (q *AQEngine) Vpop() (*resource.Song, error) {
-	return q.cache.Lookup(q.generateFresh(), false)
+	return q.cache.Lookup(q.generateFresh())
 }
 
 // The interface for external callers to add to the markov chain

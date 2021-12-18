@@ -96,7 +96,7 @@ func TestVpop(t *testing.T) {
 	q.NotifyPlayed("test_b", true)
 	q.NotifyPlayed("test_a", true)
 	q.NotifyPlayed("test_b", true)
-	time.Sleep(1) // Necessary because NotifyPlayed is async
+	time.Sleep(1 * time.Millisecond) // Necessary because NotifyPlayed is async
 
 	// Since the last song was a b, the next should be an a
 	song, _ := q.Vpop()
@@ -107,7 +107,7 @@ func TestVpop(t *testing.T) {
 
 	// Play an a, now the next should be a b
 	q.NotifyPlayed("test_a", true)
-	time.Sleep(1)
+	time.Sleep(1 * time.Millisecond)
 	song, _ = q.Vpop()
 
 	songPath = song.ResourceID()
@@ -136,11 +136,11 @@ func TestFresh(t *testing.T) {
 	q.NotifyPlayed("test_b", true)
 	q.NotifyPlayed("test_a", true)
 	q.NotifyPlayed("test_b", true)
-	time.Sleep(1) // Necessary because NotifyPlayed is async
+	time.Sleep(1 * time.Millisecond) // Necessary because NotifyPlayed is async
 
 	// At this point we should run into the freshness limiter
 	q.NotifyPlayed("test_a", true)
-	time.Sleep(1)
+	time.Sleep(1 * time.Millisecond)
 	song, _ := q.Vpop()
 
 	songPath := song.ResourceID()

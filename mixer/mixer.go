@@ -68,15 +68,11 @@ func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 			// Start broadcasting right away and set some flags/state values
 			tempSong, tempPath, isEmpty, fromAuto := mixer.fetchNextSong()
 			if !isEmpty && (tempSong != nil) {
+				// We are good to play the song
 				mixer.learnFrom = !fromAuto
 				mixer.currentSongData = tempSong
 				mixer.CurrentSongInfo = tempPath
-			} else {
-				time.Sleep(2 * time.Second)
-			}
 
-			// Check if we even have anything to try and play
-			if mixer.currentSongData != nil {
 				// Take the current song and put it into the encoder
 				_, err = io.Copy(wavInput, mixer.currentSongData)
 
@@ -87,6 +83,7 @@ func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 						// This usually means ffmpeg is struggling. Let's give it a break
 						log.Printf("Error copying into mixer output: %v\n", err)
 						time.Sleep(10 * time.Second)
+						continue
 					}
 				}
 
@@ -98,10 +95,8 @@ func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 				}
 				mixer.skipped = false
 
-				// We couldn't play from current, assume that the song ended
-				// Also, if we just recieved a skip, then we don't want to use that
-				// song to train qutoq
-				if mixer.CurrentSongInfo.IpfsPath() != "" {
+				// We finished playing the song, record that unless we've decided not to
+				if err != nil && mixer.CurrentSongInfo.IpfsPath() != "" {
 					mixer.queue.NotifyDone(mixer.CurrentSongInfo.IpfsPath(), mixer.learnFrom)
 				}
 
@@ -113,6 +108,9 @@ func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 				}
 
 				mixer.learnFrom = true
+			} else if isEmpty {
+				// If the queue is empty wait a bit before trying to fetch another song
+				time.Sleep(2 * time.Second)
 			}
 		}
 	}()
