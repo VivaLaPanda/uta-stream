@@ -36,8 +36,8 @@ func TestPop(t *testing.T) {
 	c := cache.NewCache(cacheFile, "localhost:5001")
 	// Make sure the q starts empty
 	a := auto.NewAQEngine(autoqTestfile, c, 0, 1, 0)
-	q := NewQueue(a, false, ipfsUrl)
-	song, _, isEmpty, _ := q.Pop()
+	q := NewQueue(a, c, false, ipfsUrl)
+	_, _, isEmpty, _ := q.Pop()
 	if isEmpty == false {
 		t.Errorf("Queue didn't start empty. isEmpty was false.\n")
 	}
@@ -45,7 +45,7 @@ func TestPop(t *testing.T) {
 	// Pop then push
 	q.AddToQueue(testSongA)
 	q.AddToQueue(testSongB)
-	song, _, isEmpty, _ = q.Pop()
+	song, _, isEmpty, _ := q.Pop()
 	if isEmpty == true {
 		t.Errorf("Queue still reporting empty after enqueue.\n")
 		return
@@ -53,7 +53,7 @@ func TestPop(t *testing.T) {
 	if song.IpfsPath() != testSongA.IpfsPath() {
 		t.Errorf("Popped_1 != enqueue_1: %v != %v\n", song, testSongA)
 	}
-	song, _, isEmpty, _ = q.Pop()
+	song, _, _, _ = q.Pop()
 	if song.IpfsPath() != testSongB.IpfsPath() {
 		t.Errorf("Popped_2 != enqueue_2: %v != %v\n", song, testSongB)
 	}
@@ -67,8 +67,8 @@ func TestPlayNext(t *testing.T) {
 	// Make sure the q starts empty
 	c := cache.NewCache(cacheFile, "localhost:5001")
 	a := auto.NewAQEngine(autoqTestfile, c, 0, 1, 0)
-	q := NewQueue(a, false, "localhost:5001")
-	song, _, isEmpty, _ := q.Pop()
+	q := NewQueue(a, c, false, "localhost:5001")
+	_, _, isEmpty, _ := q.Pop()
 	if isEmpty == false {
 		t.Errorf("Queue didn't start empty. isEmpty was false.\n")
 	}
@@ -76,7 +76,7 @@ func TestPlayNext(t *testing.T) {
 	// Pop then push
 	q.PlayNext(testSongA)
 	q.PlayNext(testSongB)
-	song, _, isEmpty, _ = q.Pop()
+	song, _, isEmpty, _ := q.Pop()
 	if isEmpty == true {
 		t.Errorf("Queue still reporting empty after enqueue.\n")
 		return
@@ -84,7 +84,7 @@ func TestPlayNext(t *testing.T) {
 	if song.IpfsPath() != testSongB.IpfsPath() {
 		t.Errorf("Popped_1 != pushed_1: %v != %v\n", song, testSongB)
 	}
-	song, _, isEmpty, _ = q.Pop()
+	song, _, _, _ = q.Pop()
 	if song.IpfsPath() != testSongA.IpfsPath() {
 		t.Errorf("Popped_2 != pushed_2: %v != %v\n", song, testSongA)
 	}
@@ -98,7 +98,7 @@ func TestIsEmpty(t *testing.T) {
 	// Make sure the q starts empty
 	c := cache.NewCache(cacheFile, "localhost:5001")
 	a := auto.NewAQEngine(autoqTestfile, c, 0, 1, 0)
-	q := NewQueue(a, false, "localhost:5001")
+	q := NewQueue(a, c, false, "localhost:5001")
 	if q.IsEmpty() == false {
 		t.Errorf("Queue didn't start empty. isEmpty was false.\n")
 		return
@@ -119,7 +119,7 @@ func TestDump(t *testing.T) {
 	// Make sure the q starts empty
 	c := cache.NewCache(cacheFile, "localhost:5001")
 	a := auto.NewAQEngine(autoqTestfile, c, 0, 1, 0)
-	q := NewQueue(a, false, "localhost:5001")
+	q := NewQueue(a, c, false, "localhost:5001")
 
 	q.PlayNext(testSongB)
 	q.PlayNext(testSongB)
@@ -142,7 +142,7 @@ func TestGetQueue(t *testing.T) {
 	// Make sure the q starts empty
 	c := cache.NewCache(cacheFile, "localhost:5001")
 	a := auto.NewAQEngine(autoqTestfile, c, 0, 1, 0)
-	q := NewQueue(a, false, "localhost:5001")
+	q := NewQueue(a, c, false, "localhost:5001")
 
 	q.PlayNext(testSongA)
 	q.PlayNext(testSongA)

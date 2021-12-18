@@ -76,11 +76,6 @@ func (s *Song) MarshalJSON() ([]byte, error) {
 		s.Title = "Unknown Track"
 	}
 
-	// Extra validation
-	if s.IpfsPath() == "" {
-		return nil, fmt.Errorf("tried to encode invalid song. Songs being encoded *must* have an ipfs path. Song: %v", s)
-	}
-
 	return json.Marshal(&struct {
 		IpfsPath string        `json:"ipfsPath"`
 		URL      string        `json:"url"`
@@ -103,11 +98,6 @@ func (s *Song) UnmarshalJSON(data []byte) error {
 	}{}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
-	}
-
-	// Validation
-	if aux.IpfsPath == "" {
-		return fmt.Errorf("tried to decode invalid song. Songs being unmarshalled *must* have an ipfs path. Song: %v", &aux)
 	}
 
 	// Sane defaults

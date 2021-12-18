@@ -12,6 +12,7 @@ import (
 
 	"github.com/VivaLaPanda/uta-stream/queue/auto"
 	"github.com/VivaLaPanda/uta-stream/resource"
+	"github.com/VivaLaPanda/uta-stream/resource/cache"
 
 	shell "github.com/ipfs/go-ipfs-api"
 )
@@ -20,6 +21,7 @@ type Queue struct {
 	fifo          []*resource.Song
 	lock          *sync.Mutex
 	autoq         *auto.AQEngine
+	cache         *cache.Cache
 	ipfs          *shell.Shell
 	queueFilename string
 	AutoqEnabled  bool
@@ -28,11 +30,12 @@ type Queue struct {
 // NeqQueue will return a queue structure with the provided autoq engine and cache
 // attached. enableAutoq will determine whether a Pop will attempt to fetch
 // from the autoq.
-func NewQueue(aqEngine *auto.AQEngine, enableAutoq bool, ipfsUrl string) *Queue {
+func NewQueue(aqEngine *auto.AQEngine, cache *cache.Cache, enableAutoq bool, ipfsUrl string) *Queue {
 	queueFilename := "queue.db"
 	q := &Queue{
 		lock:          &sync.Mutex{},
 		autoq:         aqEngine,
+		cache:         cache,
 		AutoqEnabled:  enableAutoq,
 		queueFilename: queueFilename,
 		ipfs:          shell.NewShell(ipfsUrl),
@@ -52,6 +55,19 @@ func NewQueue(aqEngine *auto.AQEngine, enableAutoq bool, ipfsUrl string) *Queue 
 		log.Fatalf("Fatal error when interacting with qfile on launch.\nErr: %v\n", err)
 	}
 
+	// When reading in the queuefile, it's possible we crashed before and thus have
+	// songs that never got resolved. Try to go and do that
+	for idx, song := range q.fifo {
+		if song.IpfsPath() == "" && song.URL() != nil {
+			tempSong, err := cache.Lookup(song.URL().String(), false)
+			if err != nil {
+				log.Printf("Failed to resume downloading of song in queue.\nErr: %v\n", err)
+			} else {
+				q.fifo[idx] = tempSong
+			}
+		}
+	}
+
 	return q
 }
 
@@ -59,10 +75,10 @@ func NewQueue(aqEngine *auto.AQEngine, enableAutoq bool, ipfsUrl string) *Queue 
 // a file if one already exists at that location.
 func (q *Queue) Write(filename string) error {
 	qfile, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0660)
-	defer qfile.Close()
 	if err != nil {
 		return err
 	}
+	defer qfile.Close()
 	encoder := json.NewEncoder(qfile)
 	q.lock.Lock()
 	if len(q.fifo) == 0 {
@@ -80,7 +96,11 @@ func (q *Queue) Write(filename string) error {
 // but it is left public in case a client needs to load old data or something
 func (q *Queue) Load(filename string) error {
 	file, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
 	defer file.Close()
+
 	if err == nil {
 		decoder := json.NewDecoder(file)
 		q.lock.Lock()
@@ -134,7 +154,7 @@ func (q *Queue) Pop() (song *resource.Song, songReader io.ReadCloser, emptyq boo
 	// Resolve the resource ID in the queue
 	songReader, err := song.Resolve(q.ipfs)
 	if err != nil {
-		log.Printf("Issue when resolving resource from Queue. Err: %v\n", err)
+		log.Printf("Issue when resolving song (%v). Err: %v\n", song, err)
 		return song, nil, false, fromAuto
 	}
 

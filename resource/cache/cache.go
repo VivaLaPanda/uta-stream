@@ -17,15 +17,10 @@ import (
 // Cache is a struct which tracks the necessary state to translate
 // resourceIDs into resolveable ipfs hashes or readers
 type Cache struct {
-	songMap         *map[string]*resource.Song
-	ipfs            *shell.Shell
-	cacheFilename   string
-	activeDownloads chan bool
+	songMap       *map[string]*resource.Song
+	ipfs          *shell.Shell
+	cacheFilename string
 }
-
-// Used to limit how many ongoing downloads we have. useful to make sure
-// Youtube doesn't get mad at us
-var maxActiveDownloads = 2
 
 // Function which will provide a new cache struct
 // An cache must be provided a file that it can read/write it's data to
@@ -35,10 +30,9 @@ var maxActiveDownloads = 2
 func NewCache(cacheFilename string, ipfsUrl string) *Cache {
 	songMap := make(map[string]*resource.Song)
 	c := &Cache{
-		songMap:         &songMap,
-		ipfs:            shell.NewShell(ipfsUrl),
-		cacheFilename:   cacheFilename,
-		activeDownloads: make(chan bool, maxActiveDownloads),
+		songMap:       &songMap,
+		ipfs:          shell.NewShell(ipfsUrl),
+		cacheFilename: cacheFilename,
 	}
 
 	// Confirm we can interact with our persitent storage
@@ -125,17 +119,14 @@ func (c *Cache) Lookup(resourceID string, urgent bool) (song *resource.Song, err
 }
 
 func (c *Cache) handleUncachedUrl(song *resource.Song, url string, ipfs *shell.Shell) (*resource.Song, error) {
-	c.activeDownloads <- true
 	song, err := download.Download(song, ipfs)
 	if err != nil {
-		<-c.activeDownloads
 		return song, err
 	}
 
 	// Cache the song once we've resolved it into a playable resource
 	go func() {
 		_, err := song.Resolve(ipfs)
-		<-c.activeDownloads
 
 		// Double check we have an ipfs path registered
 		if err == nil && song.IpfsPath() != "" {
