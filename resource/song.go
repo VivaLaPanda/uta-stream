@@ -11,8 +11,6 @@ import (
 	shell "github.com/ipfs/go-ipfs-api"
 )
 
-var bufferSize int64 = 10000 //kb
-
 type Song struct {
 	ipfsPath      string
 	url           *url.URL
@@ -171,8 +169,6 @@ func (s *Song) Resolve(ipfs *shell.Shell) (reader io.ReadCloser, err error) {
 	// ipfs reader if we can
 	if s.resolutionErr != nil {
 		return nil, s.resolutionErr
-	} else if s.reader != nil {
-		return s.reader, nil
 	} else if s.ipfsPath != "" {
 		reader, err = ipfs.Cat(s.ipfsPath)
 

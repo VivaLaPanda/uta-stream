@@ -19,13 +19,13 @@ import (
 // Mixer is a struct which contains the persistent state necessary to talk
 // to the queue and to interact with playback as it happens
 type Mixer struct {
-	Output          chan []byte
-	bitrate         int
-	currentSongData io.ReadCloser
-	queue           *queue.Queue
-	CurrentSongInfo *resource.Song
-	skipped         bool
-	learnFrom       bool
+	Output            chan []byte
+	bitrate           int
+	currentSongReader io.ReadCloser
+	queue             *queue.Queue
+	CurrentSongInfo   *resource.Song
+	skipped           bool
+	learnFrom         bool
 }
 
 // NewMixer will return a mixer struct. Said struct will have the provided queue
@@ -37,13 +37,13 @@ type Mixer struct {
 // The mixer object will be tied to a goroutine which will populate the output
 func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 	mixer := &Mixer{
-		Output:          make(chan []byte, 4), // Needs to have space to handle song transition
-		bitrate:         bitrate,
-		currentSongData: nil,
-		queue:           queue,
-		CurrentSongInfo: &resource.Song{},
-		skipped:         false,
-		learnFrom:       false,
+		Output:            make(chan []byte, 4), // Needs to have space to handle song transition
+		bitrate:           bitrate,
+		currentSongReader: nil,
+		queue:             queue,
+		CurrentSongInfo:   &resource.Song{},
+		skipped:           false,
+		learnFrom:         false,
 	}
 
 	// Prep to encode the mp3
@@ -66,15 +66,18 @@ func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 		for {
 			// Get the next song channel and associated metadata
 			// Start broadcasting right away and set some flags/state values
-			tempSong, tempPath, isEmpty, fromAuto := mixer.fetchNextSong()
-			if !isEmpty && (tempSong != nil) {
+			tempSongData, tempSongReader, queueIsEmpty, fromAuto := mixer.fetchNextSong()
+			if tempSongReader == nil {
+				log.Printf("Song to be played doesn't have a valid reader: %s", tempSongData.ResourceID())
+			}
+			if !queueIsEmpty && (tempSongReader != nil) {
 				// We are good to play the song
 				mixer.learnFrom = !fromAuto
-				mixer.currentSongData = tempSong
-				mixer.CurrentSongInfo = tempPath
+				mixer.currentSongReader = tempSongReader
+				mixer.CurrentSongInfo = tempSongData
 
 				// Take the current song and put it into the encoder
-				_, err = io.Copy(wavInput, mixer.currentSongData)
+				_, err = io.Copy(wavInput, mixer.currentSongReader)
 
 				if err != nil {
 					// If we skipped we'll always get an error, so ignore it
@@ -91,7 +94,7 @@ func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 				// Seems like there should be a better way...
 				if !mixer.skipped {
 					// testing without reader close
-					mixer.currentSongData.Close()
+					mixer.currentSongReader.Close()
 				}
 				mixer.skipped = false
 
@@ -108,7 +111,7 @@ func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 				}
 
 				mixer.learnFrom = true
-			} else if isEmpty {
+			} else if queueIsEmpty {
 				// If the queue is empty wait a bit before trying to fetch another song
 				time.Sleep(2 * time.Second)
 			}
@@ -130,24 +133,24 @@ func (m *Mixer) Skip() {
 
 	m.skipped = true
 	m.learnFrom = false
-	m.currentSongData.Close()
+	m.currentSongReader.Close()
 }
 
 // Will go to queue and get the next track and associated metadata
 func (m *Mixer) fetchNextSong() (
-	mp3Reader io.ReadCloser,
 	nextSong *resource.Song,
-	isEmpty bool,
+	mp3Reader io.ReadCloser,
+	queueIsEmpty bool,
 	fromAuto bool) {
 
 	// Get MP3 reader.
-	nextSong, nextSongReader, isEmpty, fromAuto := m.queue.Pop()
-	if isEmpty {
+	nextSong, nextSongReader, queueIsEmpty, fromAuto := m.queue.Pop()
+	if queueIsEmpty {
 		return nil, nil, true, fromAuto
 	}
 	log.Printf("About to play %s\n", nextSong.ResourceID())
 
-	return nextSongReader, nextSong, false, fromAuto
+	return nextSong, nextSongReader, false, fromAuto
 }
 
 func byteReader(r io.ReadCloser, ch chan []byte, bytesPerSecond int) chan bool {
