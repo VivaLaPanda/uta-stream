@@ -3,24 +3,37 @@
 package download
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"log"
 	"math/rand"
 	"net/http"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/VivaLaPanda/uta-stream/resource"
 	shell "github.com/ipfs/go-ipfs-api"
-	ytdl "github.com/kkdai/youtube/v2"
 )
 
 var knownProviders = [...]string{"youtube.com", "youtu.be"}
+var youtubeHosts = map[string]bool{
+	"youtu.be":          true,
+	"youtube.com":       true,
+	"www.youtube.com":   true,
+	"m.youtube.com":     true,
+	"music.youtube.com": true,
+}
 var tempDLFolder = "TEMP-DL"
 var maxYTDownloaders = make(chan int, 3)
+
+// cookiesFile is resolved relative to the process working directory
+// (the systemd unit sets WorkingDirectory to the uta-stream dir).
+var cookiesFile = "cookies.txt"
 
 // Master download router. Looks at the url and determins which service needs
 // to hand the url. hotWriter is used to allow for playing the audio
@@ -34,20 +47,18 @@ func Download(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error) {
 	}
 
 	// Route to different handlers based on hostname
-	switch song.URL().Hostname() {
-	case "youtu.be":
+	if youtubeHosts[song.URL().Hostname()] {
 		return downloadYoutube(song, ipfs)
-	default:
-		// Get the ext
-		ext := path.Ext(song.URL().Path)
-
-		if ext == ".mp3" || ext == ".flac" {
-			return downloadMp3(song, ipfs)
-		}
-
-		return song, fmt.Errorf("URL hostname (%v) doesn't match a known provider."+
-			"Should be one of: %v", song.URL().Hostname(), knownProviders)
 	}
+
+	// Get the ext
+	ext := path.Ext(song.URL().Path)
+	if ext == ".mp3" || ext == ".flac" {
+		return downloadMp3(song, ipfs)
+	}
+
+	return song, fmt.Errorf("URL hostname (%v) doesn't match a known provider. "+
+		"Should be one of: %v", song.URL().Hostname(), knownProviders)
 }
 
 var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -145,134 +156,71 @@ func downloadMp3(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error)
 	return song, nil
 }
 
-func bestAudio(client ytdl.Client, video *ytdl.Video, formats []ytdl.Format) (best *ytdl.Format) {
-	best = &ytdl.Format{AudioSampleRate: ""}
-
-	for idx, format := range formats {
-		if format.AudioSampleRate > best.AudioSampleRate && format.AudioChannels >= best.AudioChannels {
-			// Adding this code to make sure the formats are actually downloadable
-			url, err := client.GetStreamURLContext(context.Background(), video, &format)
-			if err != nil {
-				continue
-			}
-
-			resp, err := http.Get(url)
-			if err != nil {
-				continue
-			}
-			if resp.StatusCode == http.StatusOK {
-				best = &formats[idx]
-			}
-		}
+// downloadYoutube fetches audio from YouTube using yt-dlp. yt-dlp handles the
+// bot-check (via the cookies file), the n-challenge (via a JS runtime), and the
+// PoToken (via the bgutil provider), then extracts the audio to mp3. We add the
+// resulting file to IPFS and resolve the song via its DLResult channel.
+//
+// Requires yt-dlp (and ffmpeg for the audio extraction) to be in PATH.
+func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error) {
+	ytDlp, err := exec.LookPath("yt-dlp")
+	if err != nil {
+		return song, fmt.Errorf("yt-dlp was not found in PATH. Please install yt-dlp")
 	}
 
-	return
-}
+	rawURL := song.URL().String()
 
-func downloadYoutube(song *resource.Song, ipfs *shell.Shell) (*resource.Song, error) {
-	// Setup Client
-	dlClient := ytdl.Client{}
-
-	// Get the info for the video
-	vidInfo, err := dlClient.GetVideo(song.URL().String())
+	// Fetch metadata up front so the queue has a title/duration immediately, and
+	// so auth/bot-check failures surface synchronously to the caller (the enqueue
+	// request) rather than disappearing into a background goroutine.
+	metaOut, err := exec.Command(ytDlp,
+		"--no-playlist", "--cookies", cookiesFile, "--skip-download",
+		"--print", "%(title)s", "--print", "%(duration)s", rawURL).Output()
 	if err != nil {
 		return song, fmt.Errorf("failed to fetch provided Youtube url. Err: %v", err)
 	}
-
-	// Figure out the highest bitrate format
-	bestFormat := bestAudio(dlClient, vidInfo, vidInfo.Formats)
-
-	// Add metadata to resource.Song
-	song.Title = vidInfo.Title
-	song.Duration = vidInfo.Duration
-
-	// NOTE: The following gets a little confusing because of the io piping
-	// the mp3 is being downloaded into a writer. That writer was provided by
-	// the splitAudio function which will convert the audio into an mp3 and expose
-	// it via the reader at convOutput
-
-	// Prepare the audio extraction pipeline
-	// Prepare the converter
-	convInput, convOutput, convProgress, err := splitAudio()
-	if err != nil {
-		return song, err
+	metaLines := strings.Split(strings.TrimSpace(string(metaOut)), "\n")
+	if len(metaLines) >= 1 {
+		song.Title = strings.TrimSpace(metaLines[0])
 	}
-
-	// Prepare the mp3 file we'll write to
-	fileLocation := filepath.Join(tempDLFolder, vidInfo.ID+randSeq(4)+".mp3")
-	_ = os.MkdirAll(filepath.Dir(fileLocation), os.ModePerm)
-
-	// if the file already exists it's been queued already and is being downloaded
-	// by another thread. Don't error, but don't start the DL, resource resolution
-	// will handle the dupes
-	_, err = os.Stat(fileLocation)
-	var mp3File *os.File
-	if os.IsNotExist(err) {
-		mp3File, err = os.Create(fileLocation)
-		if err != nil {
-			return song, fmt.Errorf("failed to create mp3 file. Err: %v", err)
+	if len(metaLines) >= 2 {
+		if secs, perr := strconv.ParseFloat(strings.TrimSpace(metaLines[1]), 64); perr == nil {
+			song.Duration = time.Duration(secs) * time.Second
 		}
-	} else {
-		return song, nil
 	}
 
-	// Download the mp4 into the converter
-	dlError := make(chan error)
+	// yt-dlp extracts to <fileBase>.mp3 (it downloads bestaudio then converts).
+	fileBase := filepath.Join(tempDLFolder, randSeq(12))
+	fileLocation := fileBase + ".mp3"
+
 	go func() {
-		log.Printf("Queuing download of mp4 from %v\n", song.URL().String())
+		// Bound concurrent YouTube downloads
 		maxYTDownloaders <- 0
-		log.Printf("Starting download of mp4 from %v\n", song.URL().String())
-		rawRespStream, _, err := dlClient.GetStream(vidInfo, bestFormat)
+		defer func() { <-maxYTDownloaders }()
+
+		log.Printf("Starting yt-dlp download of %v\n", rawURL)
+		out, err := exec.Command(ytDlp,
+			"--no-playlist", "--cookies", cookiesFile,
+			"-f", "bestaudio", "-x", "--audio-format", "mp3",
+			"-o", fileBase+".%(ext)s", rawURL).CombinedOutput()
 		if err != nil {
-			dlError <- fmt.Errorf("ytdl encountered an error: %v", err)
+			song.DLFailure <- fmt.Errorf("yt-dlp failed to download %s. Err: %v. Output: %s",
+				rawURL, err, string(out))
 			return
 		}
-		defer rawRespStream.Close()
-
-		io.Copy(convInput, rawRespStream)
-		defer convInput.Close()
-
-		log.Printf("Downloading of %v complete\n", song.URL().String())
-		<-maxYTDownloaders
-		dlError <- nil
-	}()
-
-	// Read from converter and write to the file and potentially the provided hotWriter
-	go func() {
-		log.Printf("Converting %s mp4 to mp3\n", song.URL().String())
-
-		io.Copy(mp3File, convOutput)
-		log.Printf("Conversion of %s to mp3 complete\n", song.URL().String())
-		convOutput.Close()
-		if song.Writer != nil {
-			song.Writer.Close()
-		}
-		mp3File.Close()
-	}()
-
-	// Place into IPFS and resolve the placeholder
-	go func() {
-		// BLock until DL finishes, nil for success, else will be an error
-		err := <-dlError
-		if err != nil {
-			song.DLFailure <- fmt.Errorf("failed to download %s. Err: %v", song.URL().String(), err)
-			return
-		}
-
-		// Wait for convert to finish
-		convProgress.Wait()
+		log.Printf("Downloading of %v complete\n", rawURL)
 
 		// Add to ipfs
 		ipfsPath, err := addToIpfs(fileLocation, ipfs)
 		if err != nil {
-			song.DLFailure <- fmt.Errorf("failed to add %s to IPFS. Err: %v", song.URL().String(), err)
+			song.DLFailure <- fmt.Errorf("failed to add %s to IPFS. Err: %v", rawURL, err)
 			return
 		}
 		song.DLResult <- ipfsPath
 
 		// Remove the mp3 now that we've added
 		if err = os.Remove(fileLocation); err != nil {
-			log.Printf("Failed to remove mp3 for %s. Err: %v\n", song.URL().String(), err)
+			log.Printf("Failed to remove mp3 for %s. Err: %v\n", rawURL, err)
 		}
 	}()
 
