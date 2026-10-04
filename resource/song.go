@@ -115,6 +115,11 @@ func (s *Song) UnmarshalJSON(data []byte) error {
 }
 
 func (s *Song) ResourceID() (resourceID string) {
+	// Safe on a nil or half-built song: callers log this when something went wrong
+	if s == nil {
+		return ""
+	}
+
 	// If we have the IPFS path fetch it right away
 	if s.ipfsPath != "" {
 		return s.ipfsPath
@@ -127,6 +132,9 @@ func (s *Song) ResourceID() (resourceID string) {
 		s.ipfsPath = resourceID
 		return resourceID
 	default:
+		if s.url == nil {
+			return ""
+		}
 		return s.url.String()
 	}
 }

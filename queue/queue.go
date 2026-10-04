@@ -134,7 +134,8 @@ func (q *Queue) Pop() (song *resource.Song, songReader io.ReadCloser, emptyq boo
 			if err != nil {
 				songData, _ := song.MarshalJSON()
 				log.Printf("Issue when resolving song (%s). Err: %v\n", songData, err)
-				return nil, nil, true, fromAuto
+				// not empty: there was a song, it just can't be played. The mixer skips it.
+				return song, nil, false, fromAuto
 			}
 
 			return song, songReader, false, fromAuto

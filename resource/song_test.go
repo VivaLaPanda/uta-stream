@@ -33,6 +33,16 @@ func TestJson(t *testing.T) {
 	}
 }
 
+func TestResourceIDOnEmptySongs(t *testing.T) {
+	var missing *Song
+	if id := missing.ResourceID(); id != "" {
+		t.Errorf("nil song ResourceID = %q, want empty", id)
+	}
+	if id := (&Song{Title: "Loading Next Song"}).ResourceID(); id != "" {
+		t.Errorf("song with no path or url ResourceID = %q, want empty", id)
+	}
+}
+
 func TestResourceID(t *testing.T) {
 	rawUrl := "https://youtu.be/nAwTw1aYy6M"
 	song, _ := NewSong(rawUrl)

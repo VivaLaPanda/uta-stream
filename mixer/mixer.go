@@ -64,57 +64,50 @@ func NewMixer(queue *queue.Queue, bitrate int) *Mixer {
 	// also handle song transitions
 	go func() {
 		for {
-			// Get the next song channel and associated metadata
+			// Get the next playable song and associated metadata (waits while the queue
+			// is empty, skips songs that fail to resolve)
 			// Start broadcasting right away and set some flags/state values
-			tempSongData, tempSongReader, queueIsEmpty, fromAuto := mixer.fetchNextSong()
-			if tempSongReader == nil {
-				log.Printf("Song to be played doesn't have a valid reader: %s", tempSongData.ResourceID())
-			}
-			if !queueIsEmpty && (tempSongReader != nil) {
-				// We are good to play the song
-				mixer.learnFrom = !fromAuto
-				mixer.currentSongReader = tempSongReader
-				mixer.CurrentSongInfo = tempSongData
+			tempSongData, tempSongReader, fromAuto := nextPlayable(mixer.queue.Pop, time.Sleep)
+			// We are good to play the song
+			mixer.learnFrom = !fromAuto
+			mixer.currentSongReader = tempSongReader
+			mixer.CurrentSongInfo = tempSongData
 
-				// Take the current song and put it into the encoder
-				_, err = io.Copy(wavInput, mixer.currentSongReader)
+			// Take the current song and put it into the encoder
+			_, err = io.Copy(wavInput, mixer.currentSongReader)
 
-				if err != nil {
-					// If we skipped we'll always get an error, so ignore it
-					if !mixer.skipped {
-						// We can't send data to the encoder for some reason
-						// This usually means ffmpeg is struggling. Let's give it a break
-						log.Printf("Error copying into mixer output: %v\n", err)
-						time.Sleep(10 * time.Second)
-						continue
-					}
-				}
-
-				// Avoid double closes, if we skipped we already closed the reader
-				// Seems like there should be a better way...
+			if err != nil {
+				// If we skipped we'll always get an error, so ignore it
 				if !mixer.skipped {
-					// testing without reader close
-					mixer.currentSongReader.Close()
+					// We can't send data to the encoder for some reason
+					// This usually means ffmpeg is struggling. Let's give it a break
+					log.Printf("Error copying into mixer output: %v\n", err)
+					time.Sleep(10 * time.Second)
+					continue
 				}
-				mixer.skipped = false
-
-				// We finished playing the song, record that unless we've decided not to
-				if err != nil && mixer.CurrentSongInfo.IpfsPath() != "" {
-					mixer.queue.NotifyDone(mixer.CurrentSongInfo.IpfsPath(), mixer.learnFrom)
-				}
-
-				// Put a placeholder in the song info in case the next fetch
-				// from the ipfs takes a long time
-				mixer.CurrentSongInfo = &resource.Song{
-					Title:    "Loading Next Song",
-					Duration: 0,
-				}
-
-				mixer.learnFrom = true
-			} else if queueIsEmpty {
-				// If the queue is empty wait a bit before trying to fetch another song
-				time.Sleep(2 * time.Second)
 			}
+
+			// Avoid double closes, if we skipped we already closed the reader
+			// Seems like there should be a better way...
+			if !mixer.skipped {
+				// testing without reader close
+				mixer.currentSongReader.Close()
+			}
+			mixer.skipped = false
+
+			// We finished playing the song, record that unless we've decided not to
+			if err != nil && mixer.CurrentSongInfo.IpfsPath() != "" {
+				mixer.queue.NotifyDone(mixer.CurrentSongInfo.IpfsPath(), mixer.learnFrom)
+			}
+
+			// Put a placeholder in the song info in case the next fetch
+			// from the ipfs takes a long time
+			mixer.CurrentSongInfo = &resource.Song{
+				Title:    "Loading Next Song",
+				Duration: 0,
+			}
+
+			mixer.learnFrom = true
 		}
 	}()
 
@@ -136,21 +129,43 @@ func (m *Mixer) Skip() {
 	m.currentSongReader.Close()
 }
 
-// Will go to queue and get the next track and associated metadata
-func (m *Mixer) fetchNextSong() (
-	nextSong *resource.Song,
-	mp3Reader io.ReadCloser,
-	queueIsEmpty bool,
-	fromAuto bool) {
+// nextPlayable asks the queue for songs until it gets one that can be played.
+// While the queue is empty it waits; a song that fails to resolve (an IPFS miss,
+// a failed download) is logged and skipped, backing off longer after each
+// failure in a row so a broken queue or IPFS outage can't spin or crash the mixer.
+func nextPlayable(
+	pop func() (*resource.Song, io.ReadCloser, bool, bool),
+	sleep func(time.Duration),
+) (song *resource.Song, reader io.ReadCloser, fromAuto bool) {
+	failures := 0
+	for {
+		song, reader, queueIsEmpty, fromAuto := pop()
+		if queueIsEmpty {
+			sleep(2 * time.Second)
+			continue
+		}
+		if reader == nil {
+			failures++
+			log.Printf("Skipping unplayable song %q (%d failed in a row)\n", song.ResourceID(), failures)
+			sleep(failureBackoff(failures))
+			continue
+		}
 
-	// Get MP3 reader.
-	nextSong, nextSongReader, queueIsEmpty, fromAuto := m.queue.Pop()
-	if queueIsEmpty {
-		return nil, nil, true, fromAuto
+		log.Printf("About to play %s\n", song.ResourceID())
+		return song, reader, fromAuto
 	}
-	log.Printf("About to play %s\n", nextSong.ResourceID())
+}
 
-	return nextSong, nextSongReader, false, fromAuto
+// failureBackoff is 1s after the first failure, doubling up to 30s.
+func failureBackoff(failures int) time.Duration {
+	backoff := time.Second
+	for i := 1; i < failures && backoff < 30*time.Second; i++ {
+		backoff *= 2
+	}
+	if backoff > 30*time.Second {
+		backoff = 30 * time.Second
+	}
+	return backoff
 }
 
 func byteReader(r io.ReadCloser, ch chan []byte, bytesPerSecond int) chan bool {
