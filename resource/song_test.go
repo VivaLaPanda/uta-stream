@@ -1,7 +1,11 @@
 package resource
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	shell "github.com/ipfs/go-ipfs-api"
 )
@@ -86,5 +90,29 @@ func TestResolve(t *testing.T) {
 	reader, err := song.Resolve(sh)
 	if reader == nil {
 		t.Errorf("Resolve failed to produce a reader. Err: %s", err)
+	}
+}
+
+func TestResolveMissingSongFailsFast(t *testing.T) {
+	// A fake IPFS API that only answers offline requests, the way Kubo does for a
+	// block it doesn't have
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v0/cat" || r.URL.Query().Get("offline") != "true" {
+			t.Errorf("unexpected request %s (want an offline cat)", r.URL)
+			select {} // a non-offline cat hangs, as a network search would
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"Message":"block was not found locally (offline)","Code":0,"Type":"error"}`))
+	}))
+	defer api.Close()
+
+	song, _ := NewSong("/ipfs/QmMissing")
+	start := time.Now()
+	reader, err := song.Resolve(shell.NewShell(strings.TrimPrefix(api.URL, "http://")))
+	if err == nil || reader != nil {
+		t.Fatalf("Resolve of a missing song = (%v, %v), want an error", reader, err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Errorf("Resolve took %v; a missing song should fail at once, without the 5s retry", elapsed)
 	}
 }

@@ -1,7 +1,9 @@
 package resource
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -178,18 +180,34 @@ func (s *Song) Resolve(ipfs *shell.Shell) (reader io.ReadCloser, err error) {
 	if s.resolutionErr != nil {
 		return nil, s.resolutionErr
 	} else if s.ipfsPath != "" {
-		reader, err = ipfs.Cat(s.ipfsPath)
+		reader, err = catLocal(ipfs, s.ipfsPath)
 
-		// Sometimes ipfs just stops responding under heavy load
-		// Wait 5 sec and retry
-		if err != nil {
+		// Sometimes ipfs just stops responding under heavy load. Wait 5 sec and
+		// retry, unless IPFS answered and said it doesn't have the song
+		var apiErr *shell.Error
+		if err != nil && !errors.As(err, &apiErr) {
 			time.Sleep(5 * time.Second)
-			return ipfs.Cat(s.ipfsPath)
+			return catLocal(ipfs, s.ipfsPath)
 		}
 		return reader, err
 	}
 
 	return nil, fmt.Errorf("Song in an unknown state: %v", s)
+}
+
+// catLocal reads a song from the local IPFS node only. Every song the radio
+// plays was added on this node, so a missing block means the song is gone.
+// Without offline, IPFS searches the network for it with no time limit, and
+// the radio goes silent waiting.
+func catLocal(ipfs *shell.Shell, path string) (io.ReadCloser, error) {
+	resp, err := ipfs.Request("cat", path).Option("offline", true).Send(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != nil {
+		return nil, resp.Error
+	}
+	return resp.Output, nil
 }
 
 func (s *Song) CheckFailure() (err error) {
